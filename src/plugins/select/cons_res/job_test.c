@@ -609,6 +609,12 @@ uint16_t _can_job_run_on_node(struct job_record *job_ptr, bitstr_t *core_map,
 				    node_ptr->name);
 
 	if ((job_ptr->bit_flags & GRES_ENFORCE_BIND) == 0) {
+		/*
+		 * NOTE: This removes from consideration all cores that can not
+		 * utilized the requested GRES. This will result in rejecting
+		 * some jobs that should be allowed to run without enforced
+		 * binding
+		 */
 		gres_cores = gres_plugin_job_test(job_ptr->gres_list,
 						  gres_list, test_only,
 						  core_map, core_start_bit,
