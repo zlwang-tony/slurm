@@ -548,7 +548,7 @@ static void _block_sync_core_bitmap(struct job_record *job_ptr,
 			for (b = 0; b < sock_per_comb; b++) {
 				sock_idx =
 				socket_list[(int)((elig_idx*sock_per_comb)+b)];
-				count+=sockets_core_cnt[sock_idx];
+				count += sockets_core_cnt[sock_idx];
 				if (count >= req_cores)
 					break;
 			}
@@ -557,8 +557,8 @@ static void _block_sync_core_bitmap(struct job_record *job_ptr,
 			 * of required sockets and minimum number of CPUs
 			 */
 			if (((b < s_min) ||
-				(b == s_min && elig_core_cnt[elig_idx]
-							    <= cpu_min)) &&
+			    ((b == s_min) &&
+			     (elig_core_cnt[elig_idx] <= cpu_min))) &&
 			    (b >= min_sock[n])) {
 				s_min = b;
 				comb_min = elig_idx;
@@ -632,10 +632,10 @@ static void _block_sync_core_bitmap(struct job_record *job_ptr,
 				 * release remaining cores unless
 				 * we are allocating whole sockets
 				 */
-				if (cpus == 0 || (cpus <= ((s_min - sock_used) *
-							   min_cores_per_sock *
-							   vpus) &&
-						  sockets_used[best_fit_location])) {
+				if ((cpus == 0) ||
+				    (cpus <= ((s_min - sock_used) *
+					      min_cores_per_sock * vpus) &&
+				     sockets_used[best_fit_location])) {
 					sockets_core_cnt[best_fit_location]--;
 					if (alloc_sockets) {
 						bit_set(job_res->core_bitmap,j);
@@ -811,6 +811,7 @@ static int _cyclic_sync_core_bitmap(struct job_record *job_ptr,
 			int x_cpus, cpus_per_socket;
 			uint32_t total_cpus = 0;
 			uint32_t *cpus_cnt;
+
 			cpus_per_socket = ntasks_per_socket *
 					  job_ptr->details->cpus_per_task;
 			cpus_cnt = xmalloc(sizeof(uint32_t) * sockets);
@@ -864,7 +865,7 @@ static int _cyclic_sync_core_bitmap(struct job_record *job_ptr,
 			for (s = 0; ((s < sockets) && (cpus > 0)); s++) {
 				while ((sock_start[s] < sock_end[s]) &&
 				       (cpus_cnt[s] > 0) && (cpus > 0) &&
-					(cpus_per_sock < max_cpus_per_sock)) {
+				       (cpus_per_sock < max_cpus_per_sock)) {
 					cpus_per_sock = 0;
 					if (bit_test(core_map, sock_start[s])) {
 						int used;
@@ -942,7 +943,7 @@ static int _cyclic_sync_core_bitmap(struct job_record *job_ptr,
 				sock_cnt++;
 		}
 		for (s = 0; s < sockets; s++) {
-			if (sock_cnt < min_sock[n] && !sock_used[s] &&
+			if ((sock_cnt < min_sock[n]) && !sock_used[s] &&
 			    !sock_avoid[s]) {
 				while (sock_start[s] < sock_end[s]) {
 					if (bit_test(core_map, sock_start[s])) {

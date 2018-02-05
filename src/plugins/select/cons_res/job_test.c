@@ -567,6 +567,7 @@ fini:
  * IN s_p_n         - Expected sockets_per_node (NO_VAL if not known)
  * IN cr_type       - Consumable Resource setting
  * IN test_only     - ignore allocated memory check
+ * OUT min_socks    - Minimum count of sockets to use on this node
  *
  * NOTE: The returned cpu_count may be less than the number of set bits in
  *       core_map for the given node. The cr_dist functions will determine
@@ -616,17 +617,18 @@ uint16_t _can_job_run_on_node(struct job_record *job_ptr, bitstr_t *core_map,
 		*min_socks = 0;
 	} else if (s_p_n == NO_VAL) {
 		gres_cores = _gres_min_sock_job_test(job_ptr->gres_list,
-						 gres_list, test_only,
-						 core_map, core_start_bit,
-						 core_end_bit, job_ptr->job_id,
-						 node_ptr->name, node_i, min_socks);
+						gres_list, test_only,
+						core_map, core_start_bit,
+						core_end_bit, job_ptr->job_id,
+						node_ptr->name, node_i,
+						min_socks);
 	} else {
 		gres_cores = _gres_sock_job_test(job_ptr->gres_list,
 						 gres_list, test_only,
 						 core_map, core_start_bit,
 						 core_end_bit, job_ptr->job_id,
 						 node_ptr->name, node_i, s_p_n);
-		*min_socks=s_p_n;
+		*min_socks = s_p_n;
 	}
 
 	if (gres_cores == 0)
@@ -1058,8 +1060,8 @@ extern bitstr_t *make_core_bitmap(bitstr_t *node_map, uint16_t core_spec)
  * IN cpu_end_bit    - index into cpu_bitmap for this node's last CPU
  * IN job_id         - job's ID (for logging)
  * IN node_name      - name of the node (for logging)
- * IN node_i - Node index
- * IN s_p_n - Sockets per node required by this job or NO_VAL
+ * IN node_i         - Node index
+ * IN s_p_n          - Sockets per node required by this job or NO_VAL
  * RET: NO_VAL    - All cores on node are available
  *      otherwise - Count of available cores
  */
@@ -1074,6 +1076,7 @@ static uint32_t _gres_sock_job_test(List job_gres_list, List node_gres_list,
 	bitstr_t **sock_core_bitmap, *other_node_cores;
 	int i, j;
 	int core_bit_cnt, core_inx, sock_inx, best_socket;
+
 	if ((s_p_n == NO_VAL) || (core_bitmap == NULL) ||
 	    (select_node_record == NULL) ||
 	    ((sock_cnt = select_node_record[node_i].sockets) < 2) ||
@@ -1154,8 +1157,9 @@ static uint32_t _gres_sock_job_test(List job_gres_list, List node_gres_list,
  * IN cpu_end_bit    - index into cpu_bitmap for this node's last CPU
  * IN job_id         - job's ID (for logging)
  * IN node_name      - name of the node (for logging)
- * IN node_i - Node index
- * OUT  min_sock - Min sockets per node
+ * IN node_i         - Node index
+ * OUT  min_sock     - Minimum sockets to use per node
+ *
  * RET: NO_VAL    - All cores on node are available
  *      otherwise - Count of available cores
  */
@@ -1165,7 +1169,7 @@ static uint32_t _gres_min_sock_job_test(List job_gres_list, List node_gres_list,
 				    uint32_t job_id, char *node_name,
 				    uint32_t node_i, uint16_t *min_sock)
 {
-	uint32_t cores=0;
+	uint32_t cores = 0;
 	uint32_t sock_cnt;
 	int i;
 	bitstr_t *core_bitmap_tmp;
@@ -1180,7 +1184,7 @@ static uint32_t _gres_min_sock_job_test(List job_gres_list, List node_gres_list,
 	}
 
 	core_bitmap_tmp = bit_copy(core_bitmap);
-	for ( i = 1; i <= sock_cnt; i++) {
+	for (i = 1; i <= sock_cnt; i++) {
 		cores = _gres_sock_job_test(job_gres_list,
 					    node_gres_list, use_total_gres,
 					    core_bitmap_tmp, core_start_bit,
@@ -1188,13 +1192,13 @@ static uint32_t _gres_min_sock_job_test(List job_gres_list, List node_gres_list,
 					    node_name, node_i, i);
 		if (cores) {
 			bit_copybits(core_bitmap, core_bitmap_tmp);
-			*min_sock = (uint16_t)i;
+			*min_sock = (uint16_t) i;
 			break;
 		}
 		bit_copybits(core_bitmap_tmp, core_bitmap);
 	}
-
 	bit_free(core_bitmap_tmp);
+
 	return cores;
 }
 
@@ -1246,7 +1250,7 @@ static uint32_t _socks_per_node(struct job_record *job_ptr)
  * IN: cr_node_cnt - total number of nodes in the cluster
  * IN: cr_type     - resource type
  * OUT: cpu_cnt    - number of cpus that can be used by this job
- * OUT: sock_cnt_ptr - min number of socks that must be used by this job
+ * OUT: sock_cnt_ptr - minimum number of socks that must be used by this job
  * IN: test_only   - ignore allocated memory check
  */
 static void _get_res_usage(struct job_record *job_ptr, bitstr_t *node_map,
@@ -3055,7 +3059,8 @@ static inline void _log_select_maps(char *loc, bitstr_t *node_map,
 #endif
 }
 
-/* Select the best set of resources for the given job
+/*
+ * Select the best set of resources for the given job
  * IN: job_ptr      - pointer to the job requesting resources
  * IN: min_nodes    - minimum number of nodes required
  * IN: max_nodes    - maximum number of nodes requested
@@ -3067,8 +3072,8 @@ static inline void _log_select_maps(char *loc, bitstr_t *node_map,
  * IN: test_only    - ignore allocated memory check
  * IN: part_core_map - bitmap of cores allocated to jobs of this partition
  *                     or NULL if don't care
+ * OUT: sock_cnt     - array with minimum number of sockets required per node
  * IN: prefer_alloc_nodes - select currently allocated nodes first
- * OUT  - array with min number of sockets required per node
  * RET - array with number of CPUs available per node or NULL if not runnable
  */
 static uint16_t *_select_nodes(struct job_record *job_ptr, uint32_t min_nodes,
@@ -3078,7 +3083,7 @@ static uint16_t *_select_nodes(struct job_record *job_ptr, uint32_t min_nodes,
 				struct node_use_record *node_usage,
 				uint16_t cr_type, bool test_only,
 				bitstr_t *part_core_map,
-				uint16_t ** sock_cnt,
+				uint16_t **sock_cnt,
 				bool prefer_alloc_nodes)
 {
 	int i, rc;
