@@ -322,7 +322,8 @@ static int _cmp_sock(const void *a, const void *b)
  * virtual CPUs (hyperthreads)
  */
 static void _block_sync_core_bitmap(struct job_record *job_ptr,
-				    const uint16_t cr_type)
+				    const uint16_t cr_type,
+				    uint16_t *min_sock)
 {
 	uint32_t c, s, i, j, n, b, z, size, csize, core_cnt;
 	uint16_t cpus, num_bits, vpus = 1;
@@ -350,6 +351,8 @@ static void _block_sync_core_bitmap(struct job_record *job_ptr,
 	uint16_t req_cores,best_fit_cores = 0;
 	uint32_t best_fit_location = 0;
 	uint64_t ncomb_brd;
+	uint16_t min_cores_per_sock = 0;
+	uint16_t sock_used = 0;
 	bool sufficient, best_fit_sufficient;
 
 	if (!job_res)
@@ -553,9 +556,10 @@ static void _block_sync_core_bitmap(struct job_record *job_ptr,
 			/* Use board combination with minimum number
 			 * of required sockets and minimum number of CPUs
 			 */
-			if ((b < s_min) ||
+			if (((b < s_min) ||
 				(b == s_min && elig_core_cnt[elig_idx]
-							    <= cpu_min)) {
+							    <= cpu_min)) &&
+			    (b >= min_sock[n])) {
 				s_min = b;
 				comb_min = elig_idx;
 				cpu_min = elig_core_cnt[elig_idx];
@@ -581,6 +585,8 @@ static void _block_sync_core_bitmap(struct job_record *job_ptr,
 		/* select cores from the sockets of the best-fit board
 		 * combination using a best-fit approach */
 		tmp_cpt = cpus_per_task;
+		min_cores_per_sock = 1; // TODO
+		sock_used = 0;
 		while ( cpus > 0 ) {
 
 			best_fit_cores = 0;
@@ -616,7 +622,8 @@ static void _block_sync_core_bitmap(struct job_record *job_ptr,
 				     sockets_core_cnt[best_fit_location]);
 			}
 
-			sockets_used[best_fit_location] = true;
+			if (!sockets_used[best_fit_location])
+				sock_used++;
 			for ( j = (c + (best_fit_location * ncores_nb));
 			      j < (c + ((best_fit_location + 1) * ncores_nb));
 			      j++ ) {
@@ -625,15 +632,21 @@ static void _block_sync_core_bitmap(struct job_record *job_ptr,
 				 * release remaining cores unless
 				 * we are allocating whole sockets
 				 */
-				if (cpus == 0) {
+				if (cpus == 0 || (cpus <= ((s_min - sock_used) *
+							   min_cores_per_sock *
+							   vpus) &&
+						  sockets_used[best_fit_location])) {
+					sockets_core_cnt[best_fit_location]--;
 					if (alloc_sockets) {
 						bit_set(job_res->core_bitmap,j);
 						core_cnt++;
 					} else {
-						bit_clear(job_res->core_bitmap,j);
+						bit_clear(job_res->core_bitmap,
+							  j);
 					}
 					continue;
 				}
+
 
 				/*
 				 * remove cores from socket count and
@@ -662,11 +675,16 @@ static void _block_sync_core_bitmap(struct job_record *job_ptr,
 					bit_set(job_res->core_bitmap, j);
 					core_cnt++;
 				}
+				sockets_used[best_fit_location] = true;
 			}
-
 			/* loop again if more cpus required */
 			if ( cpus > 0 )
 				continue;
+
+			if (s_min - sock_used) {
+				cpus = 1;
+				continue;
+			}
 
 			/* release remaining cores of the unused sockets */
 			for (s = 0; s < nsockets_nb; s++) {
@@ -711,7 +729,8 @@ static void _block_sync_core_bitmap(struct job_record *job_ptr,
  * virtual CPUs (hyperthreads)
  */
 static int _cyclic_sync_core_bitmap(struct job_record *job_ptr,
-				     const uint16_t cr_type, bool preempt_mode)
+				    const uint16_t cr_type, bool preempt_mode,
+				    uint16_t *min_sock)
 {
 	uint32_t c, i, j, s, n, *sock_start, *sock_end, size, csize, core_cnt;
 	uint16_t cps = 0, cpus, vpus, sockets, sock_size;
@@ -723,6 +742,7 @@ static int _cyclic_sync_core_bitmap(struct job_record *job_ptr,
 	uint16_t ntasks_per_core = 0xffff;
 	int error_code = SLURM_SUCCESS;
 	int tmp_cpt = 0; /* cpus_per_task */
+	uint16_t sock_cnt = 0;
 
 	if ((job_res == NULL) || (job_res->core_bitmap == NULL) ||
 	    (job_ptr->details == NULL))
@@ -791,7 +811,6 @@ static int _cyclic_sync_core_bitmap(struct job_record *job_ptr,
 			int x_cpus, cpus_per_socket;
 			uint32_t total_cpus = 0;
 			uint32_t *cpus_cnt;
-
 			cpus_per_socket = ntasks_per_socket *
 					  job_ptr->details->cpus_per_task;
 			cpus_cnt = xmalloc(sizeof(uint32_t) * sockets);
@@ -821,8 +840,18 @@ static int _cyclic_sync_core_bitmap(struct job_record *job_ptr,
 			/* CLANG false positive */
 			/* Try to pack all CPUs of each tasks on one socket. */
 			uint32_t *cpus_cnt, cpus_per_task;
+			uint32_t max_cpus_per_sock;
+			uint32_t cpus_per_sock = 0;
 
 			cpus_per_task = job_ptr->details->cpus_per_task;
+			if (min_sock[n]) {
+				max_cpus_per_sock = cpus / min_sock[n];
+			} else {
+				max_cpus_per_sock = cpus;
+			}
+			if (max_cpus_per_sock < cpus_per_task)
+				cpus_per_task = max_cpus_per_sock;
+
 			cpus_cnt = xmalloc(sizeof(uint32_t) * sockets);
 			for (s = 0; s < sockets; s++) {
 				for (j = sock_start[s]; j < sock_end[s]; j++) {
@@ -834,7 +863,9 @@ static int _cyclic_sync_core_bitmap(struct job_record *job_ptr,
 			tmp_cpt = cpus_per_task;
 			for (s = 0; ((s < sockets) && (cpus > 0)); s++) {
 				while ((sock_start[s] < sock_end[s]) &&
-				       (cpus_cnt[s] > 0) && (cpus > 0)) {
+				       (cpus_cnt[s] > 0) && (cpus > 0) &&
+					(cpus_per_sock < max_cpus_per_sock)) {
+					cpus_per_sock = 0;
 					if (bit_test(core_map, sock_start[s])) {
 						int used;
 						sock_used[s] = true;
@@ -859,6 +890,7 @@ static int _cyclic_sync_core_bitmap(struct job_record *job_ptr,
 							cpus = 0;
 						else
 							cpus -= used;
+						cpus_per_sock += used;
 					}
 					sock_start[s]++;
 				}
@@ -906,6 +938,22 @@ static int _cyclic_sync_core_bitmap(struct job_record *job_ptr,
 		/* clear the rest of the cores in each socket
 		 * FIXME: do we need min_core/min_socket checks here? */
 		for (s = 0; s < sockets; s++) {
+			if (sock_used[s])
+				sock_cnt++;
+		}
+		for (s = 0; s < sockets; s++) {
+			if (sock_cnt < min_sock[n] && !sock_used[s] &&
+			    !sock_avoid[s]) {
+				while (sock_start[s] < sock_end[s]) {
+					if (bit_test(core_map, sock_start[s])) {
+						sock_used[s] = true;
+						core_cnt++;
+						sock_start[s]++;
+						break;
+					}
+					sock_start[s]++;
+				}
+			}
 			if (sock_start[s] == sock_end[s])
 				continue;
 			if (!alloc_sockets || !sock_used[s]) {
@@ -1019,7 +1067,8 @@ static void _clear_spec_cores(struct job_record *job_ptr,
  *		the job, only used to identify specialized cores
  */
 extern int cr_dist(struct job_record *job_ptr, const uint16_t cr_type,
-		   bool preempt_mode, bitstr_t *avail_core_bitmap)
+		   bool preempt_mode, bitstr_t *avail_core_bitmap,
+		   uint16_t *min_sock)
 {
 	int error_code, cr_cpu = 1;
 
@@ -1067,7 +1116,7 @@ extern int cr_dist(struct job_record *job_ptr, const uint16_t cr_type,
 		cr_cpu = 0;
 
 	if (cr_cpu) {
-		_block_sync_core_bitmap(job_ptr, cr_type);
+		_block_sync_core_bitmap(job_ptr, cr_type, min_sock);
 		return SLURM_SUCCESS;
 	}
 
@@ -1084,7 +1133,7 @@ extern int cr_dist(struct job_record *job_ptr, const uint16_t cr_type,
 		case SLURM_DIST_BLOCK:
 		case SLURM_DIST_CYCLIC:
 		case SLURM_DIST_UNKNOWN:
-			_block_sync_core_bitmap(job_ptr, cr_type);
+			_block_sync_core_bitmap(job_ptr, cr_type, min_sock);
 			return SLURM_SUCCESS;
 		}
 	}
@@ -1096,7 +1145,7 @@ extern int cr_dist(struct job_record *job_ptr, const uint16_t cr_type,
 	case SLURM_DIST_BLOCK_BLOCK:
 	case SLURM_DIST_CYCLIC_BLOCK:
 	case SLURM_DIST_PLANE:
-		_block_sync_core_bitmap(job_ptr, cr_type);
+		_block_sync_core_bitmap(job_ptr, cr_type, min_sock);
 		break;
 	case SLURM_DIST_ARBITRARY:
 	case SLURM_DIST_BLOCK:
@@ -1107,7 +1156,7 @@ extern int cr_dist(struct job_record *job_ptr, const uint16_t cr_type,
 	case SLURM_DIST_CYCLIC_CFULL:
 	case SLURM_DIST_UNKNOWN:
 		error_code = _cyclic_sync_core_bitmap(job_ptr, cr_type,
-						      preempt_mode);
+						      preempt_mode, min_sock);
 		break;
 	default:
 		error("select/cons_res: invalid task_dist entry");
