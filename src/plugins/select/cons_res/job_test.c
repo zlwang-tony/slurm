@@ -1158,7 +1158,7 @@ static uint32_t _gres_sock_job_test(List job_gres_list, List node_gres_list,
  * IN job_id         - job's ID (for logging)
  * IN node_name      - name of the node (for logging)
  * IN node_i         - Node index
- * OUT  min_sock     - Minimum sockets to use per node
+ * OUT min_sock      - Minimum sockets to use per node
  *
  * RET: NO_VAL    - All cores on node are available
  *      otherwise - Count of available cores
@@ -1172,7 +1172,8 @@ static uint32_t _gres_min_sock_job_test(List job_gres_list, List node_gres_list,
 	uint32_t cores = 0;
 	uint32_t sock_cnt;
 	int i;
-	bitstr_t *core_bitmap_tmp;
+	bitstr_t *core_bitmap_tmp, *core_bitmap_avail;
+	bool min_sock_set = false;
 
 	*min_sock = 0;
 	if ((core_bitmap == NULL) || (select_node_record == NULL) ||
@@ -1183,21 +1184,26 @@ static uint32_t _gres_min_sock_job_test(List job_gres_list, List node_gres_list,
 					    job_id, node_name);
 	}
 
-	core_bitmap_tmp = bit_copy(core_bitmap);
+	core_bitmap_avail = bit_alloc(bit_size(core_bitmap));
 	for (i = 1; i <= sock_cnt; i++) {
+		core_bitmap_tmp = bit_copy(core_bitmap);
 		cores = _gres_sock_job_test(job_gres_list,
 					    node_gres_list, use_total_gres,
 					    core_bitmap_tmp, core_start_bit,
 					    core_end_bit, job_id,
 					    node_name, node_i, i);
-		if (cores) {
-			bit_copybits(core_bitmap, core_bitmap_tmp);
+		if (cores && !min_sock_set) {
 			*min_sock = (uint16_t) i;
-			break;
+			min_sock_set = true;
 		}
-		bit_copybits(core_bitmap_tmp, core_bitmap);
+		bit_or(core_bitmap_avail, core_bitmap_tmp);
+		bit_free(core_bitmap_tmp);
 	}
-	bit_free(core_bitmap_tmp);
+	for (i = core_start_bit; i < core_end_bit; i++) {
+		if (!bit_test(core_bitmap_avail, i))
+			bit_clear(core_bitmap, i);
+	}
+	bit_free(core_bitmap_avail);
 
 	return cores;
 }
