@@ -863,10 +863,10 @@ static int _cyclic_sync_core_bitmap(struct job_record *job_ptr,
 			}
 			tmp_cpt = cpus_per_task;
 			for (s = 0; ((s < sockets) && (cpus > 0)); s++) {
+				cpus_per_sock = 0;
 				while ((sock_start[s] < sock_end[s]) &&
 				       (cpus_cnt[s] > 0) && (cpus > 0) &&
 				       (cpus_per_sock < max_cpus_per_sock)) {
-					cpus_per_sock = 0;
 					if (bit_test(core_map, sock_start[s])) {
 						int used;
 						sock_used[s] = true;
