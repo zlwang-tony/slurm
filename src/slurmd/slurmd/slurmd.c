@@ -1039,8 +1039,9 @@ _reconfigure(void)
 	container_g_reconfig();
 	if (did_change) {
 		uint32_t cpu_cnt = MAX(conf->conf_cpus, conf->block_map_size);
-		(void) gres_plugin_node_config_load(cpu_cnt, conf->node_name,
-						    NULL);
+		uint32_t core_cnt = conf->sockets * conf->cores;
+		(void) gres_plugin_node_config_load(cpu_cnt, core_cnt,
+						    conf->node_name, NULL);
 		send_registration_msg(SLURM_SUCCESS, false);
 	}
 
@@ -1394,6 +1395,7 @@ _slurmd_init(void)
 	struct rlimit rlim;
 	struct stat stat_buf;
 	uint32_t cpu_cnt;
+	uint32_t core_cnt;
 
 	/*
 	 * Process commandline arguments first, since one option may be
@@ -1424,10 +1426,11 @@ _slurmd_init(void)
 
 	fini_job_cnt = cpu_cnt = MAX(conf->conf_cpus, conf->block_map_size);
 	fini_job_id = xmalloc(sizeof(uint32_t) * fini_job_cnt);
+	core_cnt = conf->sockets * conf->cores;
 
 	if ((gres_plugin_init() != SLURM_SUCCESS) ||
-	    (gres_plugin_node_config_load(cpu_cnt, conf->node_name, NULL)
-	     != SLURM_SUCCESS))
+	    (gres_plugin_node_config_load(cpu_cnt, core_cnt, conf->node_name,
+					  NULL) != SLURM_SUCCESS))
 		return SLURM_FAILURE;
 	if (slurm_topo_init() != SLURM_SUCCESS)
 		return SLURM_FAILURE;

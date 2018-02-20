@@ -1214,10 +1214,11 @@ job_manager(stepd_step_rec_t *job)
 
 	if (job->stepid == SLURM_EXTERN_CONT)
 		return _spawn_job_container(job);
-
 	if (!job->batch && job->accel_bind_type) {
-		(void) gres_plugin_node_config_load(conf->cpus, conf->node_name,
-						    (void *)&xcpuinfo_abs_to_mac);
+		(void) gres_plugin_node_config_load(conf->cpus,
+						conf->sockets * conf->cores,
+						conf->node_name,
+						(void *)&xcpuinfo_abs_to_mac2);
 	}
 
 #ifdef HAVE_ALPS_CRAY

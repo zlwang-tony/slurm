@@ -860,7 +860,7 @@ int _ranges_conv(char* lrange,char** prange,int mode);
 /* uint16_t block_map_size=8; */
 /* uint16_t block_map[] = { 0, 4, 2, 6, 1, 5, 3, 7 }; */
 /* uint16_t block_map_inv[] = { 0, 4, 2, 6, 1, 5, 3, 7 }; */
-/* xcpuinfo_abs_to_mac("0,2,4,6",&mach); */
+/* xcpuinfo_abs_to_mac("0,2", &mach); */
 /* xcpuinfo_mac_to_abs(mach,&abs); */
 
 int
@@ -951,6 +951,49 @@ end_it:
 		info("_abs_to_mac failed");
 
 	return rc;
+}
+
+int
+xcpuinfo_abs_to_mac2(char *lrange, char **prange, uint16_t mode)
+{
+
+	/* init internal data if not already done */
+	if (xcpuinfo_init() != XCPUINFO_SUCCESS)
+		return XCPUINFO_ERROR;
+
+	if (mode) {
+		int fstatus;
+		int i;
+		uint16_t *amap;
+		uint16_t *map;
+		uint16_t *map_out;
+
+		/* abstract to machine conversion */
+		amap = block_map;
+
+		/* allocate map for local work */
+		map = (uint16_t*) xmalloc(block_map_size * sizeof(uint16_t));
+		map_out = (uint16_t*) xmalloc(block_map_size *sizeof(uint16_t));
+
+		/* extract the input map */
+		fstatus = _range_to_map(lrange, map, block_map_size, 0);
+		if (fstatus)
+			goto exit;
+
+		/* do the conversion (see src/slurmd/slurmd/get_mach_stat.c) */
+		for (i = 0; i < block_map_size; i++) {
+			if (map[i])
+				map_out[amap[i]] = 1;
+		}
+
+		/* build the ouput range */
+		fstatus = _map_to_range(map_out, block_map_size, prange);
+exit:
+		xfree(map);
+		xfree(map_out);
+		return fstatus;
+	} else
+		return xcpuinfo_abs_to_mac(lrange, prange);
 }
 
 int

@@ -79,6 +79,21 @@ int xcpuinfo_fini(void);
 int xcpuinfo_abs_to_mac(char* lrange,char** prange);
 
 /*
+ * Old xcpuinfo_abs_to_mac
+ * Use xcpuinfo internal data to convert an abstract range
+ * of CPUs/COREs (slurm internal format) into the machine one
+ *
+ * range is of the form 0-1,4-5
+ *
+ * on success, the output range must be freed using xfree
+ *
+ * returned values:
+ *  - XCPUINFO_ERROR
+ *  - XCPUINFO_SUCCESS
+ */
+int xcpuinfo_abs_to_mac2(char *lrange, char **prange, uint16_t mode);
+
+/*
  * Use xcpuinfo internal data to convert a machine range
  * of cores into an abstract one (slurm internal format)
  *

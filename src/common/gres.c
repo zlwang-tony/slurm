@@ -156,13 +156,14 @@ typedef struct gres_state {
 
 /* Pointers to functions in src/slurmd/common/xcpuinfo.h that we may use */
 typedef struct xcpuinfo_funcs {
-	int (*xcpuinfo_abs_to_mac) (char *abs, char **mac);
+	int (*xcpuinfo_abs_to_mac) (char *abs, char **mac, uint16_t mode);
 } xcpuinfo_funcs_t;
 xcpuinfo_funcs_t xcpuinfo_ops;
 
 /* Local variables */
 static int gres_context_cnt = -1;
 static uint32_t gres_cpu_cnt = 0;
+static uint32_t gres_core_cnt = 0;
 static bool gres_debug = false;
 static slurm_gres_context_t *gres_context = NULL;
 static char *gres_node_name = NULL;
@@ -815,27 +816,49 @@ static int _parse_gres_config(void **dest, slurm_parser_enum_t type,
 	}
 
 	p->cpu_cnt = gres_cpu_cnt;
-	if (s_p_get_string(&p->cpus, "Cores", tbl) ||
-	    s_p_get_string(&p->cpus, "CPUs", tbl)) {
-		char *local_cpus = NULL;
-		p->cpus_bitmap = bit_alloc(gres_cpu_cnt);
+
+	if (s_p_get_string(&p->cpus, "Cores", tbl)) {
 		if (xcpuinfo_ops.xcpuinfo_abs_to_mac) {
+			char *local_cpus = NULL;
+			p->cpus_bitmap = bit_alloc(gres_cpu_cnt);
 			i = (xcpuinfo_ops.xcpuinfo_abs_to_mac)
-				(p->cpus, &local_cpus);
+				(p->cpus, &local_cpus, 0);
 			if (i != SLURM_SUCCESS) {
 				fatal("Invalid gres data for %s, Cores=%s",
 				      p->name, p->cpus);
 			}
-		} else
-			local_cpus = xstrdup(p->cpus);
-		if ((bit_size(p->cpus_bitmap) == 0) ||
-		    bit_unfmt(p->cpus_bitmap, local_cpus) != 0) {
-			fatal("Invalid gres data for %s, Cores=%s (only %u Cores  are available)",
-			      p->name, p->cpus, gres_cpu_cnt);
+			if ((bit_size(p->cpus_bitmap) == 0) ||
+			    bit_unfmt(p->cpus_bitmap, local_cpus) != 0) {
+				fatal("Invalid gres data for %s, Cores=%s local_cpus=%s "
+				      "(only %u Cores  are available)",
+				      p->name, p->cpus, local_cpus,
+				      gres_core_cnt);
+			}
+			xfree(local_cpus);
+		} else {
+			p->cpu_cnt = gres_core_cnt;
+			p->cpus_bitmap = NULL;
 		}
-		xfree(local_cpus);
-	}
+	} else if (s_p_get_string(&p->cpus, "CPUs", tbl)) {
+		if (xcpuinfo_ops.xcpuinfo_abs_to_mac) {
+			char *local_cpus = NULL;
+			p->cpus_bitmap = bit_alloc(gres_cpu_cnt);
+			i = (xcpuinfo_ops.xcpuinfo_abs_to_mac)
+				(p->cpus, &local_cpus, 1);
+			if (i != SLURM_SUCCESS) {
+				fatal("Invalid gres data for %s, CPUs=%s",
+				      p->name, p->cpus);
+			}
+			if ((bit_size(p->cpus_bitmap) == 0) ||
+			    (bit_unfmt(p->cpus_bitmap, local_cpus) != 0)) {
+				fatal("Invalid gres data for %s, CPUs=%s (only %u CPUs  are available)",
+				      p->name, p->cpus, gres_cpu_cnt);
+			}
+			xfree(local_cpus);
+		} else
+			p->cpus_bitmap = NULL;
 
+	}
 	if (s_p_get_string(&p->file, "File", tbl)) {
 		p->count = _validate_file(p->file, p->name);
 		p->has_file = 1;
@@ -1000,7 +1023,8 @@ static int _no_gres_conf(uint32_t cpu_cnt)
  * IN node_name - Name of this node
  * IN xcpuinfo_abs_to_mac - Pointer to xcpuinfo_abs_to_mac() funct, if available
  */
-extern int gres_plugin_node_config_load(uint32_t cpu_cnt, char *node_name,
+extern int gres_plugin_node_config_load(uint32_t cpu_cnt, uint32_t core_cnt,
+					char *node_name,
 					void *xcpuinfo_abs_to_mac)
 {
 	static s_p_options_t _gres_options[] = {
@@ -1034,6 +1058,7 @@ extern int gres_plugin_node_config_load(uint32_t cpu_cnt, char *node_name,
 	if (!gres_node_name && node_name)
 		gres_node_name = xstrdup(node_name);
 	gres_cpu_cnt = cpu_cnt;
+	gres_core_cnt = core_cnt;
 	tbl = s_p_hashtbl_create(_gres_options);
 	if (s_p_parse_file(tbl, NULL, gres_conf_file, false) == SLURM_ERROR)
 		fatal("error opening/reading %s", gres_conf_file);
@@ -3488,23 +3513,14 @@ static uint32_t _job_test(void *job_gres_data, void *node_gres_data,
 			return (uint32_t) 0;	/* insufficient, gres to use */
 
 		cpus_ctld = cpu_end_bit - cpu_start_bit + 1;
-		if (cpu_bitmap) {
-			if (cpus_ctld < 1) {
-				error("gres/%s: job %u cpus on node %s < 1",
-				      gres_name, job_id, node_name);
-				return (uint32_t) 0;
-			}
-			_validate_gres_node_cpus(node_gres_ptr, cpus_ctld,
-						 node_name);
-		} else {
-			for (i = 0; i < node_gres_ptr->topo_cnt; i++) {
-				if (!node_gres_ptr->topo_cpus_bitmap[i])
-					continue;
-				cpus_ctld = bit_size(node_gres_ptr->
-						     topo_cpus_bitmap[i]);
-				break;
-			}
+
+		if (cpu_bitmap && (cpus_ctld < 1)) {
+			error("gres/%s: job %u CPUs on node %s < 1",
+			      gres_name, job_id, node_name);
+			return (uint32_t) 0;
 		}
+
+		_validate_gres_node_cpus(node_gres_ptr, cpus_ctld, node_name);
 
 		alloc_cpu_bitmap = bit_alloc(cpus_ctld);
 		if (cpu_bitmap) {
