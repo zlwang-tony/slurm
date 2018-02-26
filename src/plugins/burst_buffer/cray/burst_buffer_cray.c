@@ -222,6 +222,9 @@ static bb_pools_t *_bb_get_pools(int *num_ent, bb_state_t *state_ptr,
 				 uint32_t timeout);
 static bb_sessions_t *_bb_get_sessions(int *num_ent, bb_state_t *state_ptr,
 				       uint32_t timeout);
+static void	_bb_persist_created(uint32_t job_id, uint32_t user_id,
+				    char *buf_name, char *buf_pool,
+				    uint64_t buf_size, uint32_t timeout);
 static int	_build_bb_script(struct job_record *job_ptr, char *script_file);
 static int	_create_bufs(struct job_record *job_ptr, bb_job_t *bb_job,
 			     bool job_ready);
@@ -507,7 +510,7 @@ static bb_job_t *_get_bb_job(struct job_record *job_ptr)
 		 * and destroy_persistent functions are directly supported by
 		 * dw_wlm_cli. Support "#BB" format for backward compatibility.
 		 */
-		if (bb_flag == BB_FLAG_BB_OP) {
+		if (bb_flag != 0) {
 			tok += 3;
 			while (isspace(tok[0]))
 				tok++;
@@ -1439,7 +1442,9 @@ static int _queue_stage_in(struct job_record *job_ptr, bb_job_t *bb_job)
 	char **setup_argv, **data_in_argv;
 	stage_args_t *stage_args;
 	int hash_inx = job_ptr->job_id % 10;
-	int rc = SLURM_SUCCESS;
+	int i, rc = SLURM_SUCCESS;
+	bb_buf_t *buf_ptr;
+	uint64_t total_size;
 
 	xstrfmtcat(hash_dir, "%s/hash.%d", state_save_loc, hash_inx);
 	(void) mkdir(hash_dir, 0700);
@@ -1479,8 +1484,16 @@ static int _queue_stage_in(struct job_record *job_ptr, bb_job_t *bb_job)
 #endif
 		setup_argv[16] = xstrdup(client_nodes_file_nid);
 	}
-	bb_limit_add(job_ptr->user_id, bb_job->total_size, job_pool, &bb_state,
-		     true);
+
+	total_size = bb_job->total_size;
+	for (i = 0, buf_ptr = bb_job->buf_ptr; i < bb_job->buf_cnt;
+	     i++, buf_ptr++) {
+		if ((buf_ptr->flags != BB_FLAG_DW_OP) || !buf_ptr->create)
+			continue;
+//FIXME: Check for duplicate
+		total_size += buf_ptr->size;
+	}
+	bb_limit_add(job_ptr->user_id, total_size, job_pool, &bb_state, true);
 
 	data_in_argv = xmalloc(sizeof(char *) * 10);	/* NULL terminated */
 	data_in_argv[0] = xstrdup("dw_wlm_cli");
@@ -1555,12 +1568,16 @@ static void *_start_stage_in(void *x)
 	char **setup_argv, **size_argv, **data_in_argv;
 	char *resp_msg = NULL, *resp_msg2 = NULL, *op = NULL;
 	uint64_t real_size = 0;
-	int rc = SLURM_SUCCESS, status = 0, timeout;
+	int i, rc = SLURM_SUCCESS, status = 0, timeout;
 	slurmctld_lock_t job_write_lock =
 		{ NO_LOCK, WRITE_LOCK, NO_LOCK, NO_LOCK, NO_LOCK };
+	assoc_mgr_lock_t assoc_locks =
+		{ READ_LOCK, NO_LOCK, READ_LOCK, NO_LOCK,
+		  NO_LOCK, NO_LOCK, NO_LOCK };
 	struct job_record *job_ptr;
 	bb_alloc_t *bb_alloc = NULL;
 	bb_job_t *bb_job;
+	bb_buf_t *buf_ptr;
 	bool get_real_size = false;
 	DEF_TIMERS;
 
@@ -1582,6 +1599,7 @@ static void *_start_stage_in(void *x)
 	     __func__, stage_args->job_id, TIME_STR);
 	_log_script_argv(setup_argv, resp_msg);
 	lock_slurmctld(job_write_lock);
+	assoc_mgr_lock(&assoc_locks);
 	slurm_mutex_lock(&bb_state.bb_mutex);
 	/*
 	 * The buffer's actual size may be larger than requested by the user.
@@ -1591,6 +1609,7 @@ static void *_start_stage_in(void *x)
 	bb_limit_rem(stage_args->user_id, stage_args->bb_size, stage_args->pool,
 		     &bb_state);
 	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+//FIXME: If duplicate persistent create here. What happens with job BB create?
 		trigger_burst_buffer();
 		error("%s: setup for job %u status:%u response:%s",
 		      __func__, stage_args->job_id, status, resp_msg);
@@ -1609,6 +1628,17 @@ static void *_start_stage_in(void *x)
 			error("%s: unable to find bb_job record for job %u",
 			      __func__, stage_args->job_id);
 		} else {
+			for (i = 0, buf_ptr = bb_job->buf_ptr;
+			     i < bb_job->buf_cnt; i++, buf_ptr++) {
+				if ((buf_ptr->flags != BB_FLAG_DW_OP) ||
+				    !buf_ptr->create)
+					continue;
+				_bb_persist_created(stage_args->job_id,
+						    stage_args->user_id,
+						    buf_ptr->name,
+						    buf_ptr->pool,
+						    buf_ptr->size, timeout);
+			}
 			bb_job->state = BB_STATE_STAGING_IN;
 			bb_alloc = bb_find_alloc_rec(&bb_state, job_ptr);
 			if (!bb_alloc && bb_job->total_size) {
@@ -1625,6 +1655,7 @@ static void *_start_stage_in(void *x)
 		}
 	}
 	slurm_mutex_unlock(&bb_state.bb_mutex);
+	assoc_mgr_unlock(&assoc_locks);
 	unlock_slurmctld(job_write_lock);
 
 	if (rc == SLURM_SUCCESS) {
@@ -2562,7 +2593,7 @@ static int _parse_bb_opts(struct job_descriptor *job_desc, uint64_t *bb_size,
 		 * and destroy_persistent functions are directly supported by
 		 * dw_wlm_cli. Support "#BB" format for backward compatibility.
 		 */
-		if (bb_flag == BB_FLAG_BB_OP) {
+		if (bb_flag != 0) {
 			tok += 3;
 			while (isspace(tok[0]))
 				tok++;
@@ -2673,16 +2704,6 @@ static int _parse_bb_opts(struct job_descriptor *job_desc, uint64_t *bb_size,
 				xfree(bb_pool);
 			} else if (!xstrncmp(tok, "stage_out", 9)) {
 				have_stage_out = true;
-			} else if (!xstrncmp(tok, "create_persistent", 17) ||
-				   !xstrncmp(tok, "destroy_persistent", 18)) {
-				/*
-				 * Disable support until Slurm v18.08 to prevent
-				 * user directed persistent burst buffer changes
-				 * outside of Slurm control.
-				 */
-				rc = ESLURM_BURST_BUFFER_PERMISSION;
-				break;
-
 			}
 		}
 		tok = strtok_r(NULL, "\n", &save_ptr);
@@ -4389,6 +4410,10 @@ static void _free_create_args(create_buf_data_t *create_args)
  *                delete persistent buffers
  * Returns count of buffer create/destroy requests which are pending
  */
+//FIXME: When called, before job allocation/setup
+//FIXME: Zero node jobs?
+//FIXME: Requeue
+//FIXME: Tracking persistent buffers created by pre_run
 static int _create_bufs(struct job_record *job_ptr, bb_job_t *bb_job,
 			bool job_ready)
 {
@@ -4634,9 +4659,11 @@ static void *_create_persistent(void *x)
 {
 	slurmctld_lock_t job_write_lock =
 		{ NO_LOCK, WRITE_LOCK, NO_LOCK, NO_LOCK, NO_LOCK };
+	assoc_mgr_lock_t assoc_locks =
+		{ READ_LOCK, NO_LOCK, READ_LOCK, NO_LOCK,
+		  NO_LOCK, NO_LOCK, NO_LOCK };
 	create_buf_data_t *create_args = (create_buf_data_t *) x;
 	struct job_record *job_ptr;
-	bb_alloc_t *bb_alloc;
 	char **script_argv, *resp_msg;
 	int i, status = 0;
 	uint32_t timeout;
@@ -4708,68 +4735,12 @@ static void *_create_persistent(void *x)
 		slurm_mutex_unlock(&bb_state.bb_mutex);
 		unlock_slurmctld(job_write_lock);
 	} else if (resp_msg && strstr(resp_msg, "created")) {
-		assoc_mgr_lock_t assoc_locks =
-			{ READ_LOCK, NO_LOCK, READ_LOCK, NO_LOCK,
-			  NO_LOCK, NO_LOCK, NO_LOCK };
 		lock_slurmctld(job_write_lock);
-		job_ptr = find_job_record(create_args->job_id);
-		if (!job_ptr) {
-			error("%s: unable to find job record for job %u",
-			      __func__, create_args->job_id);
-		}
 		assoc_mgr_lock(&assoc_locks);
 		slurm_mutex_lock(&bb_state.bb_mutex);
-		_reset_buf_state(create_args->user_id, create_args->job_id,
-				 create_args->name, BB_STATE_ALLOCATED,
-				 create_args->size);
-		bb_alloc = bb_alloc_name_rec(&bb_state, create_args->name,
-					     create_args->user_id);
-		bb_alloc->size = create_args->size;
-		bb_alloc->pool = xstrdup(create_args->pool);
-		if (job_ptr) {
-			bb_alloc->account   = xstrdup(job_ptr->account);
-			if (job_ptr->assoc_ptr) {
-				/* Only add the direct association id
-				 * here, we don't need to keep track
-				 * of the tree.
-				 */
-				slurmdb_assoc_rec_t *assoc = job_ptr->assoc_ptr;
-				bb_alloc->assoc_ptr = assoc;
-				xfree(bb_alloc->assocs);
-				bb_alloc->assocs = xstrdup_printf(
-					",%u,", assoc->id);
-			}
-			if (job_ptr->qos_ptr) {
-				slurmdb_qos_rec_t *qos_ptr = job_ptr->qos_ptr;
-				bb_alloc->qos_ptr = qos_ptr;
-				bb_alloc->qos = xstrdup(qos_ptr->name);
-			}
-
-			if (job_ptr->part_ptr) {
-				bb_alloc->partition =
-					xstrdup(job_ptr->part_ptr->name);
-			}
-		}
-		if (bb_state.bb_config.flags & BB_FLAG_EMULATE_CRAY) {
-			bb_alloc->create_time = time(NULL);
-			bb_alloc->id = ++last_persistent_id;
-		} else {
-			bb_sessions_t *sessions;
-			int  num_sessions = 0;
-			sessions = _bb_get_sessions(&num_sessions, &bb_state,
-						    timeout);
-			for (i = 0; i < num_sessions; i++) {
-				if (xstrcmp(sessions[i].token,
-					    create_args->name))
-					continue;
-				bb_alloc->create_time = sessions[i].created;
-				bb_alloc->id = sessions[i].id;
-				break;
-			}
-			_bb_free_sessions(sessions, num_sessions);
-		}
-		(void) bb_post_persist_create(job_ptr, bb_alloc, &bb_state);
-		bb_state.last_update_time = time(NULL);
+		_bb_persist_created(create_args->job_id, create_args->user_id,
+				    create_args->name, create_args->pool,
+				    create_args->size, timeout);
 		slurm_mutex_unlock(&bb_state.bb_mutex);
 		assoc_mgr_unlock(&assoc_locks);
 		unlock_slurmctld(job_write_lock);
@@ -4777,6 +4748,65 @@ static void *_create_persistent(void *x)
 	xfree(resp_msg);
 	_free_create_args(create_args);
 	return NULL;
+}
+
+static void _bb_persist_created(uint32_t job_id, uint32_t user_id,
+				char *buf_name, char *buf_pool,
+				uint64_t buf_size, uint32_t timeout)
+{
+	int i;
+	struct job_record *job_ptr;
+	bb_alloc_t *bb_alloc;
+
+	job_ptr = find_job_record(job_id);
+	if (!job_ptr) {
+		error("%s: unable to find job record for job %u",
+		      __func__, job_id);
+	}
+
+	_reset_buf_state(user_id, job_id, buf_name, BB_STATE_ALLOCATED,
+			 buf_size);
+	bb_alloc = bb_alloc_name_rec(&bb_state, buf_name, user_id);
+	bb_alloc->size = buf_size;
+	bb_alloc->pool = xstrdup(buf_pool);
+	if (job_ptr) {
+		bb_alloc->account = xstrdup(job_ptr->account);
+		if (job_ptr->assoc_ptr) {
+			/*
+			 * Only add the direct association ID here, we don't
+			 * need to keep track of the tree.
+			 */
+			slurmdb_assoc_rec_t *assoc = job_ptr->assoc_ptr;
+			bb_alloc->assoc_ptr = assoc;
+			xfree(bb_alloc->assocs);
+			bb_alloc->assocs = xstrdup_printf(",%u,", assoc->id);
+		}
+		if (job_ptr->qos_ptr) {
+			slurmdb_qos_rec_t *qos_ptr = job_ptr->qos_ptr;
+			bb_alloc->qos_ptr = qos_ptr;
+			bb_alloc->qos = xstrdup(qos_ptr->name);
+		}
+		if (job_ptr->part_ptr)
+			bb_alloc->partition = xstrdup(job_ptr->part_ptr->name);
+	}
+	if (bb_state.bb_config.flags & BB_FLAG_EMULATE_CRAY) {
+		bb_alloc->create_time = time(NULL);
+		bb_alloc->id = ++last_persistent_id;
+	} else {
+		bb_sessions_t *sessions;
+		int num_sessions = 0;
+		sessions = _bb_get_sessions(&num_sessions, &bb_state, timeout);
+		for (i = 0; i < num_sessions; i++) {
+			if (xstrcmp(sessions[i].token, buf_name))
+					continue;
+			bb_alloc->create_time = sessions[i].created;
+			bb_alloc->id = sessions[i].id;
+			break;
+		}
+		_bb_free_sessions(sessions, num_sessions);
+	}
+	(void) bb_post_persist_create(job_ptr, bb_alloc, &bb_state);
+	bb_state.last_update_time = time(NULL);
 }
 
 /* Destroy a persistent burst buffer */

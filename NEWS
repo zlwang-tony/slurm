@@ -11,6 +11,14 @@ documents those changes that are of interest to users and administrators.
     backup servers can be configured.
  -- When a pending job's state includes "UnavailableNodes" do not include the
     nodes in FUTURE state.
+ -- burst_buffer/cray - Add support for "#DW create_persistent" and
+    "#DW destroy_persistent" operations. The "create_persistent" operation will
+    occur at job setup time (as in previous versions of Slurm). The
+    "destroy_persistent" operation will occur at job termination time (in
+    previous versions of Slurm this would occur at job setup time). The
+    "#BB create_persistent" and "#BB destroy_persistent" operations will
+    continue to be supported, but support will not be provided for new options
+    to those operations.
 
 * Changes in Slurm 18.08.0pre1
 ==============================
