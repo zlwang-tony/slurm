@@ -225,6 +225,7 @@ static bb_sessions_t *_bb_get_sessions(int *num_ent, bb_state_t *state_ptr,
 static void	_bb_persist_created(uint32_t job_id, uint32_t user_id,
 				    char *buf_name, char *buf_pool,
 				    uint64_t buf_size, uint32_t timeout);
+static void	_bb_persist_destroyed(bb_alloc_t *bb_alloc);
 static int	_build_bb_script(struct job_record *job_ptr, char *script_file);
 static int	_create_bufs(struct job_record *job_ptr, bb_job_t *bb_job,
 			     bool job_ready);
@@ -2088,10 +2089,11 @@ static void *_start_teardown(void *x)
 	static uint32_t previous_job_id = 0;
 	stage_args_t *teardown_args;
 	char **teardown_argv, *resp_msg = NULL;
-	int status = 0, timeout;
+	int i, status = 0, timeout;
 	struct job_record *job_ptr;
 	bb_alloc_t *bb_alloc = NULL;
 	bb_job_t *bb_job = NULL;
+	bb_buf_t *buf_ptr;
 	/* Locks: write job */
 	slurmctld_lock_t job_write_lock = {
 		NO_LOCK, WRITE_LOCK, NO_LOCK, NO_LOCK, NO_LOCK };
@@ -2163,7 +2165,11 @@ static void *_start_teardown(void *x)
 		_queue_teardown(teardown_args->job_id, teardown_args->user_id,
 				hurry);
 	} else {
+		assoc_mgr_lock_t assoc_locks =
+			{ READ_LOCK, NO_LOCK, READ_LOCK, NO_LOCK,
+			  NO_LOCK, NO_LOCK, NO_LOCK };
 		lock_slurmctld(job_write_lock);
+		assoc_mgr_lock(&assoc_locks);
 		slurm_mutex_lock(&bb_state.bb_mutex);
 		job_ptr = find_job_record(teardown_args->job_id);
 		_purge_bb_files(teardown_args->job_id, job_ptr);
@@ -2173,8 +2179,23 @@ static void *_start_teardown(void *x)
 					     bb_alloc->pool, &bb_state);
 				(void) bb_free_alloc_rec(&bb_state, bb_alloc);
 			}
-			if ((bb_job = _get_bb_job(job_ptr)))
+			if ((bb_job = _get_bb_job(job_ptr))) {
 				bb_job->state = BB_STATE_COMPLETE;
+				for (i = 0, buf_ptr = bb_job->buf_ptr;
+				     i < bb_job->buf_cnt; i++, buf_ptr++) {
+					if ((buf_ptr->flags != BB_FLAG_DW_OP) ||
+					    !buf_ptr->destroy)
+						continue;
+					bb_alloc = bb_find_name_rec(
+							buf_ptr->name,
+							teardown_args->user_id,
+							&bb_state);
+					if (!bb_alloc)
+						continue;
+					bb_alloc->job_id =teardown_args->job_id;
+					_bb_persist_destroyed(bb_alloc);
+				}
+			}
 			if (!IS_JOB_PENDING(job_ptr) &&	/* No email if requeue */
 			    (job_ptr->mail_type & MAIL_JOB_STAGE_OUT)) {
 				/*
@@ -2204,6 +2225,7 @@ static void *_start_teardown(void *x)
 
 		}
 		slurm_mutex_unlock(&bb_state.bb_mutex);
+		assoc_mgr_lock(&assoc_locks);
 		unlock_slurmctld(job_write_lock);
 	}
 
@@ -4913,15 +4935,8 @@ static void *_destroy_persistent(void *x)
 
 		/* Modify internal buffer record for purging */
 		if (bb_alloc) {
-			bb_alloc->state = BB_STATE_COMPLETE;
 			bb_alloc->job_id = destroy_args->job_id;
-			bb_alloc->state_time = time(NULL);
-			bb_limit_rem(bb_alloc->user_id, bb_alloc->size,
-				     bb_alloc->pool, &bb_state);
-
-			(void) bb_post_persist_delete(bb_alloc, &bb_state);
-
-			(void) bb_free_alloc_rec(&bb_state, bb_alloc);
+			_bb_persist_destroyed(bb_alloc);
 		}
 		bb_state.last_update_time = time(NULL);
 		slurm_mutex_unlock(&bb_state.bb_mutex);
@@ -4932,6 +4947,17 @@ static void *_destroy_persistent(void *x)
 	_free_create_args(destroy_args);
 	return NULL;
 }
+
+static void _bb_persist_destroyed(bb_alloc_t *bb_alloc)
+{
+	bb_alloc->state = BB_STATE_COMPLETE;
+	bb_alloc->state_time = time(NULL);
+	bb_limit_rem(bb_alloc->user_id, bb_alloc->size, bb_alloc->pool,
+		     &bb_state);
+	(void) bb_post_persist_delete(bb_alloc, &bb_state);
+	(void) bb_free_alloc_rec(&bb_state, bb_alloc);
+}
+
 
 /* _bb_get_configs()
  *
