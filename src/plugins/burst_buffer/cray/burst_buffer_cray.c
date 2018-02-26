@@ -82,7 +82,7 @@
 #define MAX_RETRY_CNT 2	/* Hold job if "pre_run" operation fails more than
 			 * 2 times */
 
-/* Script line types */
+/* Script line prefix ("#BB" or "#DW") */
 #define LINE_OTHER 0
 #define LINE_BB    1
 #define LINE_DW    2
@@ -1444,7 +1444,6 @@ static int _queue_stage_in(struct job_record *job_ptr, bb_job_t *bb_job)
 	int hash_inx = job_ptr->job_id % 10;
 	int i, rc = SLURM_SUCCESS;
 	bb_buf_t *buf_ptr;
-	uint64_t total_size;
 
 	xstrfmtcat(hash_dir, "%s/hash.%d", state_save_loc, hash_inx);
 	(void) mkdir(hash_dir, 0700);
@@ -1485,15 +1484,18 @@ static int _queue_stage_in(struct job_record *job_ptr, bb_job_t *bb_job)
 		setup_argv[16] = xstrdup(client_nodes_file_nid);
 	}
 
-	total_size = bb_job->total_size;
 	for (i = 0, buf_ptr = bb_job->buf_ptr; i < bb_job->buf_cnt;
 	     i++, buf_ptr++) {
 		if ((buf_ptr->flags != BB_FLAG_DW_OP) || !buf_ptr->create)
 			continue;
-//FIXME: Check for duplicate
-		total_size += buf_ptr->size;
+		if (bb_find_name_rec(buf_ptr->name, job_ptr->user_id,
+				     &bb_state))
+			continue;	/* Buffer already exists */
+		bb_limit_add(job_ptr->user_id, buf_ptr->size, buf_ptr->pool,
+			     &bb_state, true);
 	}
-	bb_limit_add(job_ptr->user_id, total_size, job_pool, &bb_state, true);
+	bb_limit_add(job_ptr->user_id, bb_job->total_size, job_pool, &bb_state,
+		     true);
 
 	data_in_argv = xmalloc(sizeof(char *) * 10);	/* NULL terminated */
 	data_in_argv[0] = xstrdup("dw_wlm_cli");
@@ -1609,7 +1611,6 @@ static void *_start_stage_in(void *x)
 	bb_limit_rem(stage_args->user_id, stage_args->bb_size, stage_args->pool,
 		     &bb_state);
 	if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
-//FIXME: If duplicate persistent create here. What happens with job BB create?
 		trigger_burst_buffer();
 		error("%s: setup for job %u status:%u response:%s",
 		      __func__, stage_args->job_id, status, resp_msg);
@@ -1617,6 +1618,21 @@ static void *_start_stage_in(void *x)
 		job_ptr = find_job_record(stage_args->job_id);
 		if (job_ptr)
 			_update_system_comment(job_ptr, "setup", resp_msg, 0);
+		bb_job = bb_job_find(&bb_state, stage_args->job_id);
+		if (job_ptr && bb_job) {
+			for (i = 0, buf_ptr = bb_job->buf_ptr;
+			     i < bb_job->buf_cnt; i++, buf_ptr++) {
+				if ((buf_ptr->flags != BB_FLAG_DW_OP) ||
+				    !buf_ptr->create)
+					continue;
+				if (bb_find_name_rec(buf_ptr->name,
+						     job_ptr->user_id,
+						     &bb_state))
+					continue;   /* Buffer already exists */
+				bb_limit_rem(job_ptr->user_id, buf_ptr->size,
+					     buf_ptr->pool, &bb_state);
+			}
+		}
 	} else {
 		job_ptr = find_job_record(stage_args->job_id);
 		bb_job = bb_job_find(&bb_state, stage_args->job_id);
@@ -2230,7 +2246,8 @@ static void _rm_active_job_bb(char *resv_name, char **pool_name,
 	list_iterator_destroy(job_iterator);
 }
 
-/* Test if a job can be allocated a burst buffer.
+/*
+ * Test if a job can be allocated a burst buffers.
  * This may preempt currently active stage-in for higher priority jobs.
  *
  * RET 0: Job can be started now
@@ -2309,9 +2326,11 @@ static int _test_size_limit(struct job_record *job_ptr, bb_job_t *bb_job)
 		}
 	}
 
-	/* Account for reserved resources. Reduce reservation size for
+	/*
+	 * Account for reserved resources. Reduce reservation size for
 	 * resources already claimed from the reservation. Assume node reboot
-	 * required since we have not selected the compute nodes yet. */
+	 * required since we have not selected the compute nodes yet.
+	 */
 	resv_bb = job_test_bb_resv(job_ptr, now, true);
 	if (resv_bb) {
 		burst_buffer_info_t *resv_bb_ptr;
