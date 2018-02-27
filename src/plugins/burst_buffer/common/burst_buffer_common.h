@@ -127,8 +127,10 @@ typedef struct bb_user {
 	uint32_t user_id;
 } bb_user_t;
 
-#define BB_FLAG_BB_OP		1	/* Requested using #BB prefix */
-#define BB_FLAG_DW_OP		2	/* Requested using #DW prefix */
+#define BB_FLAG_BB_OP		0x01	/* Requested using #BB prefix */
+#define BB_FLAG_DW_OP		0x02	/* Requested using #DW prefix */
+#define BB_FLAG_PERS_FOUND	0x10	/* Persistent burst buffer already
+					 * exists */
 
 /* Burst buffer creation records with state */
 typedef struct {

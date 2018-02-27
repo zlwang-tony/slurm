@@ -1487,11 +1487,14 @@ static int _queue_stage_in(struct job_record *job_ptr, bb_job_t *bb_job)
 
 	for (i = 0, buf_ptr = bb_job->buf_ptr; i < bb_job->buf_cnt;
 	     i++, buf_ptr++) {
-		if ((buf_ptr->flags != BB_FLAG_DW_OP) || !buf_ptr->create)
+		if (!(buf_ptr->flags & BB_FLAG_DW_OP) ||
+		    !buf_ptr->create)
 			continue;
 		if (bb_find_name_rec(buf_ptr->name, job_ptr->user_id,
-				     &bb_state))
+				     &bb_state)) {
+			buf_ptr->flags |= BB_FLAG_PERS_FOUND;
 			continue;	/* Buffer already exists */
+		}
 		bb_limit_add(job_ptr->user_id, buf_ptr->size, buf_ptr->pool,
 			     &bb_state, true);
 	}
@@ -1623,13 +1626,16 @@ static void *_start_stage_in(void *x)
 		if (job_ptr && bb_job) {
 			for (i = 0, buf_ptr = bb_job->buf_ptr;
 			     i < bb_job->buf_cnt; i++, buf_ptr++) {
-				if ((buf_ptr->flags != BB_FLAG_DW_OP) ||
+				if (!(buf_ptr->flags & BB_FLAG_DW_OP) ||
 				    !buf_ptr->create)
 					continue;
 				if (bb_find_name_rec(buf_ptr->name,
 						     job_ptr->user_id,
-						     &bb_state))
+						     &bb_state)) {
+					buf_ptr->flags |= BB_FLAG_PERS_FOUND;
 					continue;   /* Buffer already exists */
+				} else
+					buf_ptr->flags &= (~BB_FLAG_PERS_FOUND);
 				bb_limit_rem(job_ptr->user_id, buf_ptr->size,
 					     buf_ptr->pool, &bb_state);
 			}
@@ -1647,9 +1653,26 @@ static void *_start_stage_in(void *x)
 		} else {
 			for (i = 0, buf_ptr = bb_job->buf_ptr;
 			     i < bb_job->buf_cnt; i++, buf_ptr++) {
-				if ((buf_ptr->flags != BB_FLAG_DW_OP) ||
-				    !buf_ptr->create)
+				if (!(buf_ptr->flags & BB_FLAG_DW_OP) ||
+				    !buf_ptr->create ||
+				    (buf_ptr->flags & BB_FLAG_PERS_FOUND))
 					continue;
+				if ((bb_alloc = bb_find_name_rec(buf_ptr->name,
+							job_ptr->user_id,
+							&bb_state))) {
+					/*
+					 * Likely due to race condition with
+					 * multiple jobs creating a persistent
+					 * buffer with the same name.
+					 */
+					debug("%s: found duplicate buffer name: %s",
+					      __func__, buf_ptr->name);
+					/* Restore space limit */
+					bb_limit_rem(job_ptr->user_id,
+						     buf_ptr->size,
+						     buf_ptr->pool, &bb_state);
+					continue;
+				}
 				_bb_persist_created(stage_args->job_id,
 						    stage_args->user_id,
 						    buf_ptr->name,
@@ -2107,6 +2130,22 @@ static void *_start_teardown(void *x)
 		sleep(5);
 	previous_job_id = teardown_args->job_id;
 
+	lock_slurmctld(job_write_lock);
+	slurm_mutex_lock(&bb_state.bb_mutex);
+	job_ptr = find_job_record(teardown_args->job_id);
+	if (job_ptr && ((bb_job = _get_bb_job(job_ptr)))) {
+		for (i = 0, buf_ptr = bb_job->buf_ptr; i < bb_job->buf_cnt;
+		     i++, buf_ptr++) {
+			if (bb_find_name_rec(buf_ptr->name,
+					     teardown_args->user_id, &bb_state))
+				buf_ptr->flags |= BB_FLAG_PERS_FOUND;
+			else
+				buf_ptr->flags &= (~BB_FLAG_PERS_FOUND);
+		}
+	}
+	slurm_mutex_unlock(&bb_state.bb_mutex);
+	unlock_slurmctld(job_write_lock);
+
 	START_TIMER;
 	if (teardown_args->timeout)
 		timeout = teardown_args->timeout * 1000;
@@ -2183,15 +2222,21 @@ static void *_start_teardown(void *x)
 				bb_job->state = BB_STATE_COMPLETE;
 				for (i = 0, buf_ptr = bb_job->buf_ptr;
 				     i < bb_job->buf_cnt; i++, buf_ptr++) {
-					if ((buf_ptr->flags != BB_FLAG_DW_OP) ||
-					    !buf_ptr->destroy)
+					if (!(buf_ptr->flags & BB_FLAG_DW_OP) ||
+					    !buf_ptr->destroy ||
+					    !(buf_ptr->flags &
+					      BB_FLAG_PERS_FOUND)) {
 						continue;
+					}
 					bb_alloc = bb_find_name_rec(
 							buf_ptr->name,
 							teardown_args->user_id,
 							&bb_state);
-					if (!bb_alloc)
+					if (!bb_alloc ||
+					    (bb_alloc->state ==
+					     BB_STATE_COMPLETE)) {
 						continue;
+					}
 					bb_alloc->job_id =teardown_args->job_id;
 					_bb_persist_destroyed(bb_alloc);
 				}
@@ -4934,7 +4979,7 @@ static void *_destroy_persistent(void *x)
 				 destroy_args->name, BB_STATE_DELETED, 0);
 
 		/* Modify internal buffer record for purging */
-		if (bb_alloc) {
+		if (bb_alloc && (bb_alloc->state != BB_STATE_COMPLETE)) {
 			bb_alloc->job_id = destroy_args->job_id;
 			_bb_persist_destroyed(bb_alloc);
 		}
