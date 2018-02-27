@@ -2274,7 +2274,7 @@ static void *_start_teardown(void *x)
 
 		}
 		slurm_mutex_unlock(&bb_state.bb_mutex);
-		assoc_mgr_lock(&assoc_locks);
+		assoc_mgr_unlock(&assoc_locks);
 		unlock_slurmctld(job_write_lock);
 	}
 
