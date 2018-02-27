@@ -1244,7 +1244,6 @@ extern void bb_limit_add(uint32_t user_id, uint64_t bb_size, char *pool,
 		if (i >= state_ptr->bb_config.pool_cnt)
 			error("%s: Unable to located pool %s", __func__, pool);
 	}
-
 	/* Update user space used */
 	bb_user = bb_find_user_rec(user_id, state_ptr);
 	xassert(bb_user);

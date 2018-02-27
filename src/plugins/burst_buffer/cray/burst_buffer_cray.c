@@ -1151,6 +1151,10 @@ static void _load_state(bool init_config)
 	bitstr_t *pools_bitmap;
 
 	slurm_mutex_lock(&bb_state.bb_mutex);
+	if ((bb_state.bb_config.flags & BB_FLAG_EMULATE_CRAY) && !first_run) {
+		slurm_mutex_unlock(&bb_state.bb_mutex);
+		return;
+	}
 	if (bb_state.bb_config.other_timeout)
 		timeout = bb_state.bb_config.other_timeout * 1000;
 	else
