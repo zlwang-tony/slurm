@@ -1499,6 +1499,7 @@ static int _queue_stage_in(struct job_record *job_ptr, bb_job_t *bb_job)
 			buf_ptr->flags |= BB_FLAG_PERS_FOUND;
 			continue;	/* Buffer already exists */
 		}
+		buf_ptr->flags &= (~BB_FLAG_PERS_FOUND);
 		bb_limit_add(job_ptr->user_id, buf_ptr->size, buf_ptr->pool,
 			     &bb_state, true);
 	}
@@ -1626,6 +1627,7 @@ static void *_start_stage_in(void *x)
 		job_ptr = find_job_record(stage_args->job_id);
 		if (job_ptr)
 			_update_system_comment(job_ptr, "setup", resp_msg, 0);
+// NEED LOGIC TO PARSE STDOUT HERE FOR PARTIAL SUCCESS (SOME PERSISTENT & JOB CREATES)
 		bb_job = bb_job_find(&bb_state, stage_args->job_id);
 		if (job_ptr && bb_job) {
 			for (i = 0, buf_ptr = bb_job->buf_ptr;
@@ -2187,7 +2189,7 @@ static void *_start_teardown(void *x)
 		      plugin_name, __func__, teardown_args->job_id, status,
 		      resp_msg);
 
-
+// NEED LOGIC TO PARSE STDOUT HERE FOR PARTIAL SUCCESS (SOME PERSISTENT DESTROYS)
 		lock_slurmctld(job_write_lock);
 		job_ptr = find_job_record(teardown_args->job_id);
 		if (job_ptr) {
@@ -4539,10 +4541,6 @@ static void _free_create_args(create_buf_data_t *create_args)
  *                delete persistent buffers
  * Returns count of buffer create/destroy requests which are pending
  */
-//FIXME: When called, before job allocation/setup
-//FIXME: Zero node jobs?
-//FIXME: Requeue
-//FIXME: Tracking persistent buffers created by pre_run
 static int _create_bufs(struct job_record *job_ptr, bb_job_t *bb_job,
 			bool job_ready)
 {
