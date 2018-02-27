@@ -2640,6 +2640,21 @@ static void _timeout_bb_rec(void)
 	}
 }
 
+static void _name_list_del(void *x)
+{
+	xfree(x);
+}
+
+static int _name_list_match(void *x, void *key)
+{
+	char *name1 = (char *) x;
+	char *name2 = (char *) key;
+	if (!xstrcmp(name1, name2))
+		return 1;
+	return 0;
+}
+
+typedef int (*ListFindF) (void *x, void *key);
 /* Perform basic burst_buffer option validation */
 static int _parse_bb_opts(struct job_descriptor *job_desc, uint64_t *bb_size,
 			  uid_t submit_uid)
@@ -2650,6 +2665,7 @@ static int _parse_bb_opts(struct job_descriptor *job_desc, uint64_t *bb_size,
 	uint64_t tmp_cnt, swap_cnt = 0;
 	int rc = SLURM_SUCCESS;
 	bool enable_persist = false, have_bb = false, have_stage_out = false;
+	List create_names, destroy_names;
 
 	xassert(bb_size);
 	*bb_size = 0;
@@ -2665,6 +2681,8 @@ static int _parse_bb_opts(struct job_descriptor *job_desc, uint64_t *bb_size,
 	if ((rc != SLURM_SUCCESS) || (!job_desc->burst_buffer))
 		return rc;
 
+	create_names = list_create(_name_list_del);
+	destroy_names = list_create(_name_list_del);
 	bb_script = xstrdup(job_desc->burst_buffer);
 	tok = strtok_r(bb_script, "\n", &save_ptr);
 	while (tok) {
@@ -2714,7 +2732,16 @@ static int _parse_bb_opts(struct job_descriptor *job_desc, uint64_t *bb_size,
 				    ((bb_name[0] >= '0') &&
 				     (bb_name[0] <= '9')))
 					rc =ESLURM_INVALID_BURST_BUFFER_REQUEST;
-				xfree(bb_name);
+				if (list_find_first(create_names,
+						    _name_list_match, bb_name)){
+					/*
+					 * Disable multiple create_persistent
+					 * requests with same name so that
+					 * #BB and #DW don't get confused
+					 */
+					rc =ESLURM_INVALID_BURST_BUFFER_REQUEST;
+				}
+				(void) list_append(create_names, bb_name);
 				if ((sub_tok = strstr(tok, "pool="))) {
 					bb_pool = xstrdup(sub_tok + 5);
 					if ((sub_tok = strchr(bb_pool, ' ')))
@@ -2739,6 +2766,16 @@ static int _parse_bb_opts(struct job_descriptor *job_desc, uint64_t *bb_size,
 					rc =ESLURM_INVALID_BURST_BUFFER_REQUEST;
 					break;
 				}
+				bb_name = xstrdup(sub_tok + 5);
+				if ((sub_tok = strchr(bb_name, ' ')))
+					sub_tok[0] = '\0';
+				if (list_find_first(destroy_names,
+						    _name_list_match, bb_name)){
+					rc =ESLURM_INVALID_BURST_BUFFER_REQUEST;
+				}
+				(void) list_append(destroy_names, bb_name);
+				if (rc != SLURM_SUCCESS)
+					break;
 			} else {
 				/* Ignore other (future) options */
 			}
@@ -2799,6 +2836,8 @@ static int _parse_bb_opts(struct job_descriptor *job_desc, uint64_t *bb_size,
 		tok = strtok_r(NULL, "\n", &save_ptr);
 	}
 	xfree(bb_script);
+	list_destroy(create_names);
+	list_destroy(destroy_names);
 
 	if (!have_bb)
 		rc = ESLURM_INVALID_BURST_BUFFER_REQUEST;
