@@ -169,11 +169,16 @@ SLURM Job_id=12 Name=my_app Staged Out, StageOut time 00:05:07
 
 <p>These options are used for both the <u>burst_buffer/cray</u> and
 <u>burst_buffer/generic</u> plugins to create and delete persistent burst
-buffers, which have a lifetime independent of the job.</p>
+buffers, which have a lifetime independent of the job. The "#DW" header may be
+only with Cray's CLE 6.0UP06 (or later) and Slurm version 19.05 (or later).
+Earlier versions of Cray or Slurm require the "#BB" header.</p>
 <ul>
 <li>#BB create_persistent name=&lt;name&gt; capacity=&lt;number&gt;
-[access=&lt;access&gt;] [pool=&lt;pool&gt; [type=&lt;type&gt;]</li>
+[access_mode=&lt;access&gt;] [pool=&lt;pool&gt; [type=&lt;type&gt;]</li>
 <li>#BB destroy_persistent name=&lt;name&gt; [hurry]</li>
+<li>#DW create_persistent name=&lt;name&gt; capacity=&lt;number&gt;
+[access_mode=&lt;access&gt;] [pool=&lt;pool&gt; [type=&lt;type&gt;] ...</li>
+<li>#DW destroy_persistent name=&lt;name&gt;</li>
 </ul>
 <p>The persistent burst buffer name may not start with a numeric value (numeric
 names are reserved for job-specific burst buffers).
@@ -361,6 +366,6 @@ The second job can be made to wait for the first job's stage out operation to
 complete using the "afterburstbuffer" dependency option (e.g.
 "sbatch --dependency=afterburstbuffer:123 ...").</p>
 
-<p style="text-align:center;">Last modified 24 April 2018</p>
+<p style="text-align:center;">Last modified 22 January 2019</p>
 
 <!--#include virtual="footer.txt"-->

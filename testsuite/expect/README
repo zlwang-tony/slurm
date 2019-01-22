@@ -738,12 +738,13 @@ test34.2   Validate that qos PreemptMode is enforced.
 
 test35.*   Burst buffer tests
 =============================
-test35.1   Cray persistent burst buffer creation
+test35.1   Cray persistent burst buffer creation using old #BB syntax
 test35.2   Cray job-specific burst buffer use
 test35.3   Cray burst buffer use by job arrays
 test35.4   Zero size job with burst buffer creation testing
 test35.5   Cray dwstat command testing
 test35.6   Test of --depend=afterburstbuffer option
+test35.7   Cray persistent burst buffer creation using new #DW syntax
 
 test36.#   Testing of openlava/LSF wrappers and Perl APIs.
 ==========================================================

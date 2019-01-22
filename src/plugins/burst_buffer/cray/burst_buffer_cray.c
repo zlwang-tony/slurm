@@ -223,8 +223,8 @@ static bb_pools_t *_bb_get_pools(int *num_ent, bb_state_t *state_ptr,
 static bb_sessions_t *_bb_get_sessions(int *num_ent, bb_state_t *state_ptr,
 				       uint32_t timeout);
 static int	_build_bb_script(struct job_record *job_ptr, char *script_file);
-static int	_create_bufs(struct job_record *job_ptr, bb_job_t *bb_job,
-			     bool job_ready);
+static int	_persist_mgmt(struct job_record *job_ptr, bb_job_t *bb_job,
+			      bool job_ready);
 static void *	_create_persistent(void *x);
 static void *	_destroy_persistent(void *x);
 static void	_free_create_args(create_buf_data_t *create_args);
@@ -402,7 +402,7 @@ static int _alloc_job_bb(struct job_record *job_ptr, bb_job_t *bb_job,
 	}
 
 	if (bb_job->buf_cnt &&
-	    (_create_bufs(job_ptr, bb_job, job_ready) > 0))
+	    (_persist_mgmt(job_ptr, bb_job, job_ready) > 0))
 		return EAGAIN;
 
 	if (bb_job->state < BB_STATE_STAGING_IN) {
@@ -467,9 +467,11 @@ static uint64_t _set_granularity(uint64_t orig_size, char *bb_pool)
 	return orig_size;
 }
 
-/* Return the burst buffer size specification of a job
+/*
+ * Return the burst buffer size specification of a job
  * RET size data structure or NULL of none found
- * NOTE: delete return value using _del_bb_size() */
+ * NOTE: delete return value using _del_bb_size()
+ */
 static bb_job_t *_get_bb_job(struct job_record *job_ptr)
 {
 	char *bb_specs, *bb_hurry, *bb_name, *bb_type, *bb_access, *bb_pool;
@@ -510,14 +512,16 @@ static bb_job_t *_get_bb_job(struct job_record *job_ptr)
 		/*
 		 * Effective Slurm v18.08 and CLE6.0UP06 the create_persistent
 		 * and destroy_persistent functions are directly supported by
-		 * dw_wlm_cli. Support "#BB" format for backward compatibility.
+		 * dw_wlm_cli for commands having a "#DW" header. Support
+		 * "#BB" format commands for backward compatibility.
 		 */
 		if (bb_flag != 0) {
 			tok += 3;
 			while (isspace(tok[0]))
 				tok++;
 		}
-		if (bb_flag == BB_FLAG_BB_OP) {
+		if ((bb_flag == BB_FLAG_BB_OP) ||
+		    (bb_flag == BB_FLAG_DW_OP)) {
 			if (!xstrncmp(tok, "create_persistent", 17)) {
 				have_bb = true;
 				bb_access = NULL;
@@ -609,7 +613,7 @@ static bb_job_t *_get_bb_job(struct job_record *job_ptr)
 				//bb_job->buf_ptr[inx].type = NULL;
 				//bb_job->buf_ptr[inx].use = false;
 			} else {
-				/* Ignore other (future) options */
+				/* Ignore other (future) #BB options */
 			}
 		}
 		if (bb_flag == BB_FLAG_DW_OP) {
@@ -2571,16 +2575,17 @@ static int _parse_bb_opts(struct job_descriptor *job_desc, uint64_t *bb_size,
 		/*
 		 * Effective Slurm v18.08 and CLE6.0UP06 the create_persistent
 		 * and destroy_persistent functions are directly supported by
-		 * dw_wlm_cli. Support "#BB" format for backward compatibility.
+		 * dw_wlm_cli for commands having a "#DW" header. Support
+		 * "#BB" format commands for backward compatibility.
 		 */
-		if (bb_flag == BB_FLAG_BB_OP) {
+		if ((bb_flag == BB_FLAG_BB_OP) ||
+		    (bb_flag == BB_FLAG_DW_OP)) {
 			tok += 3;
 			while (isspace(tok[0]))
 				tok++;
 			if (!xstrncmp(tok, "create_persistent", 17) &&
 			    !enable_persist) {
-				info("%s: User %d disabled from creating "
-				     "persistent burst buffer",
+				info("%s: User %d disabled from creating persistent burst buffer",
 				     __func__, submit_uid);
 				rc = ESLURM_BURST_BUFFER_PERMISSION;
 				break;
@@ -2618,8 +2623,7 @@ static int _parse_bb_opts(struct job_descriptor *job_desc, uint64_t *bb_size,
 					break;
 			} else if (!xstrncmp(tok, "destroy_persistent", 18) &&
 				   !enable_persist) {
-				info("%s: User %d disabled from destroying "
-				     "persistent burst buffer",
+				info("%s: User %d disabled from destroying persistent burst buffer",
 				     __func__, submit_uid);
 				rc = ESLURM_BURST_BUFFER_PERMISSION;
 				break;
@@ -2629,16 +2633,10 @@ static int _parse_bb_opts(struct job_descriptor *job_desc, uint64_t *bb_size,
 					rc =ESLURM_INVALID_BURST_BUFFER_REQUEST;
 					break;
 				}
-			} else {
-				/* Ignore other (future) options */
-			}
-		}
-		if (bb_flag == BB_FLAG_DW_OP) {
-			tok += 3;
-			while (isspace(tok[0]))
-				tok++;
-			if (!xstrncmp(tok, "jobdw", 5) &&
-			    (capacity = strstr(tok, "capacity="))) {
+			} else if (bb_flag == BB_FLAG_BB_OP) {
+				/* Ignore other (future) #BB options */
+			} else if (!xstrncmp(tok, "jobdw", 5) &&
+				   (capacity = strstr(tok, "capacity="))) {
 				bb_pool = NULL;
 				have_bb = true;
 				tmp_cnt = bb_get_size_num(capacity + 9, 1);
@@ -2687,16 +2685,6 @@ static int _parse_bb_opts(struct job_descriptor *job_desc, uint64_t *bb_size,
 				xfree(bb_pool);
 			} else if (!xstrncmp(tok, "stage_out", 9)) {
 				have_stage_out = true;
-			} else if (!xstrncmp(tok, "create_persistent", 17) ||
-				   !xstrncmp(tok, "destroy_persistent", 18)) {
-				/*
-				 * Disable support until Slurm v18.08 to prevent
-				 * user directed persistent burst buffer changes
-				 * outside of Slurm control.
-				 */
-				rc = ESLURM_BURST_BUFFER_PERMISSION;
-				break;
-
 			}
 		}
 		tok = strtok_r(NULL, "\n", &save_ptr);
@@ -3869,7 +3857,7 @@ extern int bb_p_job_begin(struct job_record *job_ptr)
 	do_pre_run = _have_dw_cmd_opts(bb_job);
 
 	/* Confirm that persistent burst buffers work has been completed */
-	if ((_create_bufs(job_ptr, bb_job, true) > 0)) {
+	if ((_persist_mgmt(job_ptr, bb_job, true) > 0)) {
 		xfree(job_ptr->state_desc);
 		job_ptr->state_desc =
 			xstrdup("Error managing persistent burst buffers");
@@ -4345,15 +4333,18 @@ static void _free_create_args(create_buf_data_t *create_args)
 }
 
 /*
- * Create/destroy persistent burst buffers
+ * Create/destroy persistent burst buffers as needed for "#BB" headers.
+ * Requests to manage persistent burst buffers using "#DW" headers are managed
+ * directly by Datawarp in CLE 6.0UP06 or later.
+ *
  * job_ptr IN - job to operate upon
  * bb_job IN - job's burst buffer data
  * job_ready IN - if true, job is ready to run now, if false then do not
  *                delete persistent buffers
  * Returns count of buffer create/destroy requests which are pending
  */
-static int _create_bufs(struct job_record *job_ptr, bb_job_t *bb_job,
-			bool job_ready)
+static int _persist_mgmt(struct job_record *job_ptr, bb_job_t *bb_job,
+			 bool job_ready)
 {
 	create_buf_data_t *create_args;
 	bb_buf_t *buf_ptr;
@@ -4370,13 +4361,15 @@ static int _create_bufs(struct job_record *job_ptr, bb_job_t *bb_job,
 			;	/* Nothing to do */
 		} else if (buf_ptr->flags != BB_FLAG_BB_OP) {
 			;	/* Not processed using dw_wlm_cli */
-		} else if (buf_ptr->create) {	/* Create the buffer */
+		} else if (buf_ptr->create &&	/* Create the buffer */
+			   (buf_ptr->flags && BB_FLAG_BB_OP)) {
 			bb_alloc = bb_find_name_rec(buf_ptr->name,
 						    job_ptr->user_id,
 						    &bb_state);
 			if (bb_alloc &&
 			    (bb_alloc->user_id != job_ptr->user_id)) {
-				info("Attempt by %pJ user %u to create duplicate persistent burst buffer named %s and currently owned by user %u",
+				info("Attempt by %pJ user %u to create duplicate persistent burst buffer named "
+				     "%s and currently owned by user %u",
 				      job_ptr, job_ptr->user_id,
 				      buf_ptr->name, bb_alloc->user_id);
 				job_ptr->priority = 0;
@@ -4425,7 +4418,8 @@ static int _create_bufs(struct job_record *job_ptr, bb_job_t *bb_job,
 
 			slurm_thread_create_detached(NULL, _create_persistent,
 						     create_args);
-		} else if (buf_ptr->destroy && job_ready) {
+		} else if (buf_ptr->destroy && job_ready &&
+			   (buf_ptr->flags && BB_FLAG_BB_OP)) {
 			/* Delete the buffer */
 			bb_alloc = bb_find_name_rec(buf_ptr->name,
 						    job_ptr->user_id,
