@@ -1,7 +1,7 @@
 #!/usr/bin/env expect
 ############################################################################
 # Purpose: Test of Slurm functionality
-#          Zero size job with burst buffer creation testing (#BB headers)
+#          Zero size job with burst buffer creation testing (#DW headers)
 #
 # Output:  "TEST: #.#" followed by "SUCCESS" if test was successful, OR
 #          "WARNING: ..." with an explanation of why the test can't be made, OR
@@ -31,11 +31,13 @@
 ############################################################################
 source ./globals
 
-set test_id     "35.4"
+set test_id     "35.9"
 set exit_code   0
+set output_show "test$test_id.show.output"
 set output_use  "test$test_id.use.output"
 set script_mk   "test$test_id.mk.bash"
 set script_rm   "test$test_id.rm.bash"
+set script_show "test$test_id.show.bash"
 set script_use  "test$test_id.use.bash"
 
 proc find_bb_name { fname bb_name } {
@@ -45,7 +47,7 @@ proc find_bb_name { fname bb_name } {
 	spawn $bin_cat $fname
 	expect {
 		-re "Name=$bb_name" {
-			set found 1
+			incr found
 			exp_continue
 		}
 		eof {
@@ -67,19 +69,26 @@ if {[get_bb_persistent] == 0} {
 	exit 0
 }
 
-make_bash_script $script_mk "#BB create_persistent name=test$test_id capacity=48 access=striped type=scratch
+make_bash_script $script_mk "
+#DW create_persistent name=test$test_id capacity=48 access=striped type=scratch
 $scontrol show burst"
 
-make_bash_script $script_rm "#BB destroy_persistent name=test$test_id
+make_bash_script $script_rm "
+#DW destroy_persistent name=test$test_id
 $scontrol show burst"
 
-make_bash_script $script_use "#DW persistentdw name=test$test_id
+make_bash_script $script_show "
+$scontrol show burst"
+
+make_bash_script $script_use "
+#DW persistentdw name=test$test_id
 $scontrol show burst"
 
 #
 # Remove any vestigial buffer
 #
 send_user "\n\nClean up vestigial burst buffer\n"
+exec $bin_rm -f $output_show $output_use
 incr max_job_state_delay 300
 set job_id 0
 spawn $sbatch -t1 -N0 --output=/dev/null $script_rm
@@ -161,7 +170,7 @@ if {$job_id_use == 0} {
 	cancel_job $job_id_use
 } elseif {[wait_for_file $output_use] != 0} {
 	set exit_code 1
-} elseif {[find_bb_name $output_use test$test_id] == 0} {
+} elseif {[find_bb_name $output_use test$test_id] != 1} {
 	send_user "\nFAILURE: job using burst buffer ran before creation\n"
 	set exit_code 1
 }
@@ -169,6 +178,7 @@ if {$job_id_use == 0} {
 #
 # Now clean up the burst buffer
 #
+send_user "\n\nDestroy persistent burst buffer\n"
 set job_id_rm 0
 spawn $sbatch -t1 -N0 --output=/dev/null $script_rm
 expect {
@@ -191,10 +201,43 @@ if {$job_id_rm == 0} {
 	send_user "\nFAILURE: job did not complete\n"
 	set exit_code 1
 	cancel_job $job_id_rm
+} elseif {[find_bb_name $output_use test$test_id] != 1} {
+	send_user "\nFAILURE: burst buffer unexpected removed\n"
+	set exit_code 1
+}
+
+send_user "\n\nCheck that persistent burst buffer has been destroyed\n"
+set job_id_rm 0
+spawn $sbatch -t1 -N1 --output=$output_show $script_show
+expect {
+	-re "Submitted batch job ($number)" {
+		set job_id_rm $expect_out(1,string)
+		exp_continue
+	}
+	timeout {
+		send_user "\nFAILURE: sbatch not responding\n"
+		set exit_code 1
+	}
+	eof {
+		wait
+	}
+}
+if {$job_id_rm == 0} {
+	send_user "\nFAILURE: job did not launch\n"
+	set exit_code 1
+} elseif {[wait_for_job $job_id_rm "DONE"] != 0} {
+	send_user "\nFAILURE: job did not complete\n"
+	set exit_code 1
+	cancel_job $job_id_rm
+} elseif {[wait_for_file $output_show] != 0} {
+	set exit_code 1
+} elseif {[find_bb_name $output_show test$test_id] != 0} {
+	send_user "\nFAILURE: job deleting burst buffer failed to do so\n"
+	set exit_code 1
 }
 
 if {$exit_code == 0} {
-	exec $bin_rm -f $output_use $script_mk $script_rm $script_use
+	exec $bin_rm -f $output_show $output_use $script_mk $script_rm $script_show $script_use
 	send_user "\nSUCCESS\n"
 }
 exit $exit_code

@@ -741,11 +741,12 @@ test35.*   Burst buffer tests
 test35.1   Cray persistent burst buffer creation using old #BB syntax
 test35.2   Cray job-specific burst buffer use
 test35.3   Cray burst buffer use by job arrays
-test35.4   Zero size job with burst buffer creation testing
+test35.4   Zero size job with burst buffer creation testing (#BB headers)
 test35.5   Cray dwstat command testing
 test35.6   Test of --depend=afterburstbuffer option
 test35.7   Cray persistent burst buffer creation using new #DW syntax
 test35.8   Test creation of duplicate persistent burst buffers
+test35.9   Zero size job with burst buffer creation testing (#DW headers)
 
 test36.#   Testing of openlava/LSF wrappers and Perl APIs.
 ==========================================================
