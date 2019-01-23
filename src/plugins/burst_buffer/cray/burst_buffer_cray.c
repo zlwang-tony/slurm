@@ -1649,6 +1649,48 @@ static int _validate_pers_create(bb_job_t *bb_job, struct job_record *job_ptr)
 	return SLURM_SUCCESS;
 }
 
+static void _validate_pers_destroy(bb_job_t *bb_job, struct job_record *job_ptr)
+{
+	bb_buf_t *buf_ptr;
+	bb_alloc_t *bb_alloc;
+	int i;
+
+	for (i = 0; i < bb_job->buf_cnt; i++) {
+		buf_ptr = &bb_job->buf_ptr[i];
+		if (!buf_ptr->destroy &&
+		    ((buf_ptr->flags & BB_FLAG_DW_OP) == 0))
+			continue;
+		bb_alloc = bb_find_name_rec(buf_ptr->name, job_ptr->user_id,
+					    &bb_state);
+		if (bb_alloc && (bb_alloc->user_id != job_ptr->user_id)) {
+			info("Attempt by %pJ user %u to destroy persistent burst buffer named "
+			     "%s and currently owned by user %u",
+			      job_ptr, job_ptr->user_id, buf_ptr->name,
+			      bb_alloc->user_id);
+			_update_system_comment(job_ptr, "destroy_persistent",
+					       "Duplicate buffer name", 0);
+		} else if (!bb_alloc) {
+//FIXME: Work needed here for destroy_persistent with !BB_FLAG_EMULATE_CRAY
+			/* Does not exists. Already destroyed? */
+			debug("Persistent burst buffer \'%s\' not found, destroy reqeusted by %pJ",
+			      buf_ptr->name, job_ptr);
+		} else if (bb_state.bb_config.flags & BB_FLAG_EMULATE_CRAY) {
+			/* assoc_mgr needs locking to call bb_post_persist_delete */
+			_reset_buf_state(job_ptr->user_id, job_ptr->job_id,
+					 buf_ptr->name, BB_STATE_DELETED, 0);
+			/* Modify internal buffer record for purging */
+			bb_alloc->state = BB_STATE_COMPLETE;
+			bb_alloc->job_id = job_ptr->job_id;
+			bb_alloc->state_time = time(NULL);
+			bb_limit_rem(bb_alloc->user_id, bb_alloc->size,
+				     bb_alloc->pool, &bb_state);
+			(void) bb_post_persist_delete(bb_alloc, &bb_state);
+			(void) bb_free_alloc_rec(&bb_state, bb_alloc);
+			bb_state.last_update_time = time(NULL);
+		}
+	}
+}
+
 static void *_start_stage_in(void *x)
 {
 	stage_args_t *stage_args;
@@ -1731,6 +1773,7 @@ static void *_start_stage_in(void *x)
 						     &bb_state, true);
 					bb_alloc->create_time = time(NULL);
 				}
+//FIXME: Check that DW does create with setup operation
 				rc = _validate_pers_create(bb_job, job_ptr);
 			}
 		}
@@ -2153,6 +2196,8 @@ static void *_start_teardown(void *x)
 	struct job_record *job_ptr;
 	bb_alloc_t *bb_alloc = NULL;
 	bb_job_t *bb_job = NULL;
+	assoc_mgr_lock_t assoc_locks =
+		{ .assoc = READ_LOCK, .qos = READ_LOCK };
 	/* Locks: write job */
 	slurmctld_lock_t job_write_lock = {
 		NO_LOCK, WRITE_LOCK, NO_LOCK, NO_LOCK, NO_LOCK };
@@ -2225,6 +2270,7 @@ static void *_start_teardown(void *x)
 				hurry);
 	} else {
 		lock_slurmctld(job_write_lock);
+		assoc_mgr_lock(&assoc_locks);
 		slurm_mutex_lock(&bb_state.bb_mutex);
 		job_ptr = find_job_record(teardown_args->job_id);
 		_purge_bb_files(teardown_args->job_id, job_ptr);
@@ -2246,6 +2292,8 @@ static void *_start_teardown(void *x)
 				mail_job_info(job_ptr, MAIL_JOB_STAGE_OUT);
 				job_ptr->mail_type &= (~MAIL_JOB_STAGE_OUT);
 			}
+			if (bb_job)
+				_validate_pers_destroy(bb_job, job_ptr);
 		} else {
 			/*
 			 * This will happen when slurmctld restarts and needs
@@ -2265,6 +2313,7 @@ static void *_start_teardown(void *x)
 
 		}
 		slurm_mutex_unlock(&bb_state.bb_mutex);
+		assoc_mgr_unlock(&assoc_locks);
 		unlock_slurmctld(job_write_lock);
 	}
 
