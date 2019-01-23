@@ -35,11 +35,15 @@ set test_id     "35.8"
 set exit_code   0
 set output_mk1  "test$test_id.mk1.output"
 set output_mk2  "test$test_id.mk2.output"
-set output_rm   "test$test_id.rm.output"
+set output_rm1  "test$test_id.rm1.output"
+set output_rm2  "test$test_id.rm2.output"
+set output_show "test$test_id.show.output"
 set output_use  "test$test_id.use.output"
 set script_mk1  "test$test_id.mk1.bash"
 set script_mk2  "test$test_id.mk2.bash"
-set script_rm   "test$test_id.rm.bash"
+set script_rm1  "test$test_id.rm1.bash"
+set script_rm2  "test$test_id.rm2.bash"
+set script_show "test$test_id.show.bash"
 set script_use  "test$test_id.use.bash"
 
 proc find_bb_name { fname bb_name log_out } {
@@ -81,16 +85,22 @@ make_bash_script $script_mk1 "
 #DW create_persistent name=test_a$test_id capacity=1GiB access_mode=striped type=scratch
 $scontrol show burst"
 
-
 make_bash_script $script_mk2 "
 #DW create_persistent name=test_a$test_id capacity=1GiB access_mode=striped type=scratch
 #DW create_persistent name=test_b$test_id capacity=1GiB access_mode=striped type=scratch
 #DW jobdw type=scratch capacity=1GiB access_mode=striped,private type=scratch
 $scontrol show burst"
 
-make_bash_script $script_rm "
+make_bash_script $script_rm1 "
+#DW destroy_persistent name=test_a$test_id
+$scontrol show burst"
+
+make_bash_script $script_rm2 "
 #DW destroy_persistent name=test_a$test_id
 #DW destroy_persistent name=test_b$test_id
+$scontrol show burst"
+
+make_bash_script $script_show "
 $scontrol show burst"
 
 make_bash_script $script_use "
@@ -99,12 +109,13 @@ make_bash_script $script_use "
 $scontrol show burst"
 
 #
-# Remove any vestigial buffer
+# Destroy any vestigial buffers
 #
-send_user "\n\nClean up vestigial persistent burst buffer\n"
+send_user "\n\nDestroy vestigial persistent burst buffer\n"
+exec $bin_rm -f $output_mk1 $output_mk2 $output_rm1 $output_rm2 $output_show $output_use
 incr max_job_state_delay 300
 set job_id 0
-spawn $sbatch -t1 -N1 --output=/dev/null $script_rm
+spawn $sbatch -t1 -N1 --output=$output_rm2 $script_rm2
 expect {
 	-re "Submitted batch job ($number)" {
 		set job_id $expect_out(1,string)
@@ -126,7 +137,14 @@ if {[wait_for_job $job_id "DONE"] != 0} {
 	send_user "\nFAILURE: job did not complete\n"
 	set exit_code 1
 	cancel_job $job_id
+} elseif {[find_bb_name $output_rm2 test_a$test_id 1] != 0} {
+	send_user "\nFAILURE: job burst buffer not removed\n"
+	set exit_code 1
+} elseif {[find_bb_name $output_rm2 test_b$test_id 1] != 0} {
+	send_user "\nFAILURE: job burst buffer not removed\n"
+	set exit_code 1
 }
+exec $bin_rm -f $output_rm2
 
 #
 # Now submit a job to use the persistent burst buffer followed by a job
@@ -241,11 +259,15 @@ if {$job_id_mk == 0} {
 }
 
 #
-# Now clean up the burst buffer
+# Now destroy the burst buffers
+# The first job requests one buffer destroy, but that does not happen until the
+# job ends. The second job requests both buffers get destroyed. The third job
+# verifies buffer destruction.
 #
-send_user "\n\nClean up persistent burst buffer\n"
+#
+send_user "\n\nDestroy one persistent burst buffer\n"
 set job_id_rm 0
-spawn $sbatch -t1 -N1 --output=$output_rm $script_rm
+spawn $sbatch -t1 -N1 --output=$output_rm1 $script_rm1
 expect {
 	-re "Submitted batch job ($number)" {
 		set job_id_rm $expect_out(1,string)
@@ -266,19 +288,85 @@ if {$job_id_rm == 0} {
 	send_user "\nFAILURE: job did not complete\n"
 	set exit_code 1
 	cancel_job $job_id_rm
-} elseif {[wait_for_file $output_rm] != 0} {
+} elseif {[wait_for_file $output_rm1] != 0} {
 	set exit_code 1
-} elseif {[find_bb_name $output_rm test_a$test_id 1] != 0} {
+} elseif {[find_bb_name $output_rm1 test_a$test_id 1] != 1} {
+	send_user "\nFAILURE: burst buffer unexpected removed\n"
+	set exit_code 1
+} elseif {[find_bb_name $output_rm1 test_b$test_id 0] != 1} {
+	send_user "\nFAILURE: burst buffer unexpected removed\n"
+	set exit_code 1
+}
+
+send_user "\n\nDestroy both persistent burst buffers (one already gone)\n"
+set job_id_rm 0
+spawn $sbatch -t1 -N1 --output=$output_rm2 $script_rm2
+expect {
+	-re "Submitted batch job ($number)" {
+		set job_id_rm $expect_out(1,string)
+		exp_continue
+	}
+	timeout {
+		send_user "\nFAILURE: sbatch not responding\n"
+		set exit_code 1
+	}
+	eof {
+		wait
+	}
+}
+if {$job_id_rm == 0} {
+	send_user "\nFAILURE: job did not launch\n"
+	set exit_code 1
+} elseif {[wait_for_job $job_id_rm "DONE"] != 0} {
+	send_user "\nFAILURE: job did not complete\n"
+	set exit_code 1
+	cancel_job $job_id_rm
+} elseif {[wait_for_file $output_rm2] != 0} {
+	set exit_code 1
+} elseif {[find_bb_name $output_rm2 test_a$test_id 1] != 0} {
 	send_user "\nFAILURE: job deleting burst buffer failed to do so\n"
 	set exit_code 1
-} elseif {[find_bb_name $output_rm test_b$test_id 0] != 0} {
+} elseif {[find_bb_name $output_rm2 test_b$test_id 0] != 1} {
+	send_user "\nFAILURE: burst buffer unexpected removed\n"
+	set exit_code 1
+}
+
+send_user "\n\nCheck that both persistent burst buffers have been destroyed\n"
+set job_id_rm 0
+spawn $sbatch -t1 -N1 --output=$output_show $script_show
+expect {
+	-re "Submitted batch job ($number)" {
+		set job_id_rm $expect_out(1,string)
+		exp_continue
+	}
+	timeout {
+		send_user "\nFAILURE: sbatch not responding\n"
+		set exit_code 1
+	}
+	eof {
+		wait
+	}
+}
+if {$job_id_rm == 0} {
+	send_user "\nFAILURE: job did not launch\n"
+	set exit_code 1
+} elseif {[wait_for_job $job_id_rm "DONE"] != 0} {
+	send_user "\nFAILURE: job did not complete\n"
+	set exit_code 1
+	cancel_job $job_id_rm
+} elseif {[wait_for_file $output_show] != 0} {
+	set exit_code 1
+} elseif {[find_bb_name $output_show test_a$test_id 1] != 0} {
+	send_user "\nFAILURE: job deleting burst buffer failed to do so\n"
+	set exit_code 1
+} elseif {[find_bb_name $output_show test_b$test_id 0] != 0} {
 	send_user "\nFAILURE: job deleting burst buffer failed to do so\n"
 	set exit_code 1
 }
 
 if {$exit_code == 0} {
-	exec $bin_rm -f $output_mk1 $output_mk2 $output_rm $output_use
-	exec $bin_rm -f $script_mk1 $script_mk2 $script_rm $script_use
+	exec $bin_rm -f $output_mk1 $output_mk2 $output_rm1 $output_rm2 $output_show $output_use
+	exec $bin_rm -f $script_mk1 $script_mk2 $script_rm1 $script_rm2 $script_show $script_use
 	send_user "\nSUCCESS\n"
 }
 exit $exit_code
