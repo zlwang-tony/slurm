@@ -1596,7 +1596,7 @@ static int _validate_pers_create(bb_job_t *bb_job, struct job_record *job_ptr)
 
 	for (i = 0; i < bb_job->buf_cnt; i++) {
 		buf_ptr = &bb_job->buf_ptr[i];
-		if (!buf_ptr->create &&
+		if (!buf_ptr->create ||
 		    ((buf_ptr->flags & BB_FLAG_DW_OP) == 0))
 			continue;
 		bb_alloc = bb_find_name_rec(buf_ptr->name, job_ptr->user_id,
@@ -1657,7 +1657,7 @@ static void _validate_pers_destroy(bb_job_t *bb_job, struct job_record *job_ptr)
 
 	for (i = 0; i < bb_job->buf_cnt; i++) {
 		buf_ptr = &bb_job->buf_ptr[i];
-		if (!buf_ptr->destroy &&
+		if (!buf_ptr->destroy ||
 		    ((buf_ptr->flags & BB_FLAG_DW_OP) == 0))
 			continue;
 		bb_alloc = bb_find_name_rec(buf_ptr->name, job_ptr->user_id,
