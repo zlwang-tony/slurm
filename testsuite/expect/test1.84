@@ -82,11 +82,11 @@ set part_exclusive 0
 set part_oversubscribe_force 0
 spawn $scontrol show part $def_part
 expect {
-	-re " Nodes=($alpha_numeric_nodelist)"  {
+	-re " Nodes=($node_list_re)"  {
 		set def_hostlist $expect_out(1,string)
 		exp_continue
 	}
-	-re " BasePartitions=($alpha_numeric_nodelist)" {
+	-re " BasePartitions=($node_list_re)" {
 		set def_hostlist $expect_out(1,string)
 		exp_continue
 	}

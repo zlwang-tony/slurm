@@ -281,7 +281,7 @@ set timeout $max_job_delay
 set test_node 0
 spawn $srun --exclusive -n1 -t1 env
 expect {
-	-re "SLURMD_NODENAME=($alpha_numeric_nodelist)" {
+	-re "SLURMD_NODENAME=($node_list_re)" {
 		set test_node $expect_out(1,string)
 		exp_continue
 	}

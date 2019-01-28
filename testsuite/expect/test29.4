@@ -32,12 +32,12 @@ if {![test_super_user]} {
 }
 
 proc get_node {job_id} {
-	global scontrol squeue alpha_numeric_nodelist alpha_numeric_under exit_code
+	global scontrol squeue node_list_re node_name_re exit_code
 
 	set node_list ""
 	spawn $squeue -j $job_id --noheader -o NodeList=%N
 	expect {
-		-re "NodeList=($alpha_numeric_nodelist)" {
+		-re "NodeList=($node_list_re)" {
 			set node_list $expect_out(1,string)
 			exp_continue
 		}
@@ -53,7 +53,7 @@ proc get_node {job_id} {
 	set node_name ""
 	spawn $scontrol show hostnames $node_list
 	expect {
-		-re "($alpha_numeric_under)" {
+		-re "($node_name_re)" {
 			set node_name $expect_out(1,string)
 			exp_continue
 		}

@@ -69,7 +69,7 @@ print_header $test_id
 proc create_res { res_params failure_expected } {
 	#exp_internal 1
 	global scontrol
-	global alpha_numeric_under number alpha_numeric_nodelist
+	global alpha_numeric_under number node_list_re
 	global res_name
 	global res_nodes
 	global res_nodecnt
@@ -149,7 +149,7 @@ proc create_res { res_params failure_expected } {
 			set ret_code 1
 			exp_continue
 		}
-		-re "Nodes=($alpha_numeric_nodelist)" {
+		-re "Nodes=($node_list_re)" {
 			set res_nodes $expect_out(1,string)
 			exp_continue
 		}
@@ -318,7 +318,7 @@ if {[string compare $def_node ""] == 0} {
 
 spawn $sinfo -h -o "=%N=" -tIDLE -p $def_partition
 expect {
-	-re "=($alpha_numeric).($number)-($number).=" {
+	-re "=($node_name_re).($number)-($number).=" {
 		set def_node_name $expect_out(1,string)
 		set def_node_inx_min $expect_out(2,string)
 		set def_node_inx_max $expect_out(3,string)

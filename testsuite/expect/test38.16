@@ -79,6 +79,7 @@ spawn $salloc -t2 -N1 : -N1 $bin_bash
 expect {
 	-re "job ($number) has been allocated resources" {
 		set pack_job_id $expect_out(1,string)
+		send "unset PROMPT_COMMAND\r"
 		send "export PS1=\"$prompt\"\r"
 		exp_continue
 	}
@@ -183,7 +184,7 @@ expect {
 log_user 0
 send "$bin_sort $file_out\r"
 expect {
-	-re "0: SLURM_NODELIST=($alpha_numeric_nodelist)" {
+	-re "0: SLURM_NODELIST=($node_list_re)" {
 		set pack_nodelist $expect_out(1,string)
 		incr matches
 		exp_continue

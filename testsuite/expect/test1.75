@@ -208,7 +208,7 @@ if {$userspace_governor == 0} {
 set match 0
 spawn $scontrol show job $job_id
 expect {
-	-re "NodeList=($alpha_numeric_nodelist)" {
+	-re "NodeList=($node_list_re)" {
 		set node $expect_out(1,string)
 		set match 1
 		exp_continue

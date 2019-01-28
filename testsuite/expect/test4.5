@@ -120,7 +120,7 @@ if {$num_cpus == 0} {
 set i 0
 spawn $sinfo -o%N|%t|%o --noheader -p$partition -N
 expect {
-	-re "($alpha_numeric_nodelist).idle" {
+	-re "($node_list_re).idle" {
 		if {$i<8} {
 			set node_list($i) $expect_out(1,string)
 			incr i 1

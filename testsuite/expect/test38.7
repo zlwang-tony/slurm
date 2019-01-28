@@ -172,20 +172,20 @@ if {[wait_for_file $file_out] == 0} {
 	set rank_sum 0
 	spawn $bin_cat $file_out
 	expect {
-                -re "Rank.($number). on $alpha_numeric_under just received msg from Rank ($number)" {
+		-re "Rank.($number). on $node_name_re just received msg from Rank ($number)" {
 			incr rank_sum $expect_out(1,string)
 			incr rank_sum $expect_out(2,string)
 			incr matches
-                        exp_continue
-                }
+			exp_continue
+        }
 		-re "TEST_COMPLETE" {
 			incr complete
-                        exp_continue
+			exp_continue
 		}
 		eof {
 			wait
 		}
-        }
+	}
 	if {$matches == 0} {
 		send_user "\nFAILURE: No MPI communications occurred\n"
 		send_user "  The version of MPI you are using may be incompatible "
@@ -287,20 +287,20 @@ if {[wait_for_file $file_out] == 0} {
 	set rank_sum 0
 	spawn $bin_cat $file_out
 	expect {
-                -re "Rank.($number). on $alpha_numeric_under just received msg from Rank ($number)" {
+		-re "Rank.($number). on $node_name_re just received msg from Rank ($number)" {
 			incr rank_sum $expect_out(1,string)
 			incr rank_sum $expect_out(2,string)
 			incr matches
-                        exp_continue
-                }
+			exp_continue
+		}
 		-re "TEST_COMPLETE" {
 			incr complete
-                        exp_continue
+			exp_continue
 		}
 		eof {
 			wait
 		}
-        }
+    }
 	if {$matches == 0} {
 		send_user "\nFAILURE: No MPI communications occurred\n"
 		send_user "  The version of MPI you are using may be incompatible "
@@ -410,20 +410,20 @@ if {[wait_for_file $file_out] == 0} {
 	set rank_sum 0
 	spawn $bin_cat $file_out
 	expect {
-                -re "Rank.($number). on $alpha_numeric_under just received msg from Rank ($number)" {
+		-re "Rank.($number). on $node_name_re just received msg from Rank ($number)" {
 			incr rank_sum $expect_out(1,string)
 			incr rank_sum $expect_out(2,string)
 			incr matches
-                        exp_continue
-                }
+			exp_continue
+		}
 		-re "TEST_COMPLETE" {
 			incr complete
-                        exp_continue
+		exp_continue
 		}
 		eof {
 			wait
 		}
-        }
+	}
 	if {$matches == 0} {
 		send_user "\nFAILURE: No MPI communications occurred\n"
 		send_user "  The version of MPI you are using may be incompatible "
@@ -527,20 +527,20 @@ if {[wait_for_file $file_out] == 0} {
 	set rank_sum 0
 	spawn $bin_cat $file_out
 	expect {
-                -re "Rank.($number). on $alpha_numeric_under just received msg from Rank ($number)" {
+		-re "Rank.($number). on $node_name_re just received msg from Rank ($number)" {
 			incr rank_sum $expect_out(1,string)
 			incr rank_sum $expect_out(2,string)
 			incr matches
-                        exp_continue
-                }
+			exp_continue
+		}
 		-re "TEST_COMPLETE" {
 			incr complete
-                        exp_continue
+			exp_continue
 		}
 		eof {
 			wait
 		}
-        }
+	}
 	if {$matches == 0} {
 		send_user "\nFAILURE: No MPI communications occurred\n"
 		send_user "  The version of MPI you are using may be incompatible "

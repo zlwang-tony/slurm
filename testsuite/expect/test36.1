@@ -53,7 +53,7 @@ expect {
 		set lsid_cluster_name $expect_out(1,string)
 		exp_continue
 	}
-	-re "My master name is ($controlmachine_regex)" {
+	-re "My master name is ($node_name_re)" {
 		set lsid_control_machine $expect_out(1,string)
 		exp_continue
 	}

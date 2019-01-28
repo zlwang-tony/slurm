@@ -152,7 +152,7 @@ set node_1 ""
 set node_cnt 0
 set srun_pid [spawn $srun -p $def_part_name -l -N2 -t1 $bin_printenv SLURMD_NODENAME]
 expect {
-	-re "($number): ($controlmachine_regex)" {
+	-re "($number): ($node_name_re)" {
 		if {$expect_out(1,string) == 0} {
 			set node_0 $expect_out(2,string)
 			incr node_cnt

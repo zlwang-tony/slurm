@@ -246,9 +246,10 @@ set number               "\[0-9\]+"
 set format_time          "\[0-9\]+\\:\[0-9\]+\\:\[0-9\]+"
 set number_with_suffix   "\[0-9\]+\[KM\]*"
 set slash                "/"
-set whitespace		 "\[ \t\n\r\f\v\]+"
-set alpha_numeric_nodelist "$alpha_numeric_under\\\[?\[$alpha_numeric_comma\]?\\\]?"
-set controlmachine_regex "\[a-zA-Z0-9,\-\.\]+"
+set whitespace           "\[ \t\n\r\f\v\]+"
+set node_name_re         "\[a-zA-Z0-9,\-\._\]+"
+set node_list_re         "$node_name_re\\\[?\[$node_name_re\]?\\\]?"
+
 #
 # Cache SlurmUser to check for SuperUser requests
 #
@@ -2981,7 +2982,7 @@ proc get_cluster_name { } {
 #
 ################################################################
 proc get_control_machine { } {
-	global scontrol controlmachine_regex exit_code
+	global scontrol node_list_re exit_code
 	#
 	# Use scontrol to find the ControlMachine
 	#
@@ -2989,11 +2990,11 @@ proc get_control_machine { } {
 	set control_machine ""
 	set scon_pid [spawn -noecho $scontrol show config]
 	expect {
-		-re "ControlMachine *= ($controlmachine_regex)" {
+		-re "ControlMachine *= ($node_list_re)" {
 			set control_machine $expect_out(1,string)
 			exp_continue
 		}
-		-re "SlurmctldHost.0. *= ($controlmachine_regex)" {
+		-re "SlurmctldHost.0. *= ($node_list_re)" {
 			set control_machine $expect_out(1,string)
 			exp_continue
 		}
@@ -3092,7 +3093,7 @@ proc get_node_cnt_in_part { partition } {
 ################################################################
 
 proc get_idle_node_in_part { partition } {
-	global scontrol sinfo alpha_numeric_nodelist alpha_numeric_under
+	global scontrol sinfo node_list_re alpha_numeric_under
 
 	log_user 0
 	set host_list ""
@@ -3101,7 +3102,7 @@ proc get_idle_node_in_part { partition } {
 		-re "not found" {
 			send_user "\nFAILURE: partition $partition doesn't exist\n"
 		}
-		-re "NAME=($alpha_numeric_nodelist)" {
+		-re "NAME=($node_list_re)" {
 			set host_list $expect_out(1,string)
 		}
 		timeout {
@@ -3672,7 +3673,7 @@ proc get_srun_ports { } {
 
 proc available_nodes_hostnames { partition } {
 
-	global sinfo alpha_numeric_nodelist exit_code
+	global sinfo node_list_re exit_code
 
 	log_user 0
 	set idle_nodelist ""
@@ -3683,7 +3684,7 @@ proc available_nodes_hostnames { partition } {
 		spawn $sinfo -tidle -h -o%N -p$partition
 	}
 	expect {
-		-re "($alpha_numeric_nodelist)" {
+		-re "($node_list_re)" {
 			append idle_nodelist $sep
 			append idle_nodelist $expect_out(1,string)
 			set sep ","
@@ -5007,7 +5008,7 @@ proc delete_part { part_name } {
 #
 ################################################################
 proc create_part { part_name num_nodes_in } {
-	global scontrol srun bin_printenv number alpha_numeric_nodelist
+	global scontrol srun bin_printenv number node_list_re
 
 	set nodes ""
 	set num_nodes_out 0
@@ -5053,7 +5054,7 @@ proc create_part { part_name num_nodes_in } {
 			set num_nodes_out $expect_out(1,string)
 			exp_continue
 		}
-		-re "SLURM_NODELIST=($alpha_numeric_nodelist)" {
+		-re "SLURM_NODELIST=($node_list_re)" {
 			set nodes $expect_out(1,string)
 			exp_continue
 		}
