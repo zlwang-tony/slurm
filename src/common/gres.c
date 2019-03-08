@@ -94,7 +94,7 @@ typedef cpuset_t cpu_set_t;
 #include "src/common/xstring.h"
 
 #define MAX_GRES_BITMAP 1024
-#define MPS_DEBUG 1
+#define MPS_DEBUG 0
 
 strong_alias(gres_gresid_to_gresname, slurm_gres_gresid_to_gresname);
 strong_alias(gres_get_node_used, slurm_gres_get_node_used);
@@ -243,7 +243,7 @@ static void	_job_core_filter(void *job_gres_data, void *node_gres_data,
 static int	_job_dealloc(void *job_gres_data, void *node_gres_data,
 			     int node_offset, char *gres_name, uint32_t job_id,
 			     char *node_name, bool old_job, uint32_t plugin_id,
-			     uint32_t user_id);
+			     uint32_t user_id, bool job_fini);
 static void	_job_state_delete(void *gres_data);
 static void *	_job_state_dup(void *gres_data);
 static void *	_job_state_dup2(void *gres_data, int node_index);
@@ -9823,7 +9823,7 @@ extern int gres_plugin_job_alloc(List job_gres_list, List node_gres_list,
 static int _job_dealloc(void *job_gres_data, void *node_gres_data,
 			int node_offset, char *gres_name, uint32_t job_id,
 			char *node_name, bool old_job, uint32_t plugin_id,
-			uint32_t user_id)
+			uint32_t user_id, bool job_fini)
 {
 	int i, j, len, sz1, sz2;
 	gres_job_state_t  *job_gres_ptr  = (gres_job_state_t *)  job_gres_data;
@@ -9871,10 +9871,9 @@ static int _job_dealloc(void *job_gres_data, void *node_gres_data,
 				continue;
 			}
 			bit_clear(node_gres_ptr->gres_bit_alloc, i);
-			if (plugin_id == mps_plugin_id) {
+			if (job_fini && (plugin_id == mps_plugin_id)) {
 				_mps_assign_rm(user_id, job_gres_ptr,
 					       node_offset, i);
-//FIXME: this may only be an emulated deallocate, add flag for real deallocate calls from select plugins
 			}
 
 			/*
@@ -10044,12 +10043,13 @@ static int _job_dealloc(void *job_gres_data, void *node_gres_data,
  *		    some incorrect internal bookkeeping, but does not cause
  *		    failures in terms of allocating GRES to jobs.
  * IN user_id     - job's user ID
+ * IN: job_fini   - job fully terminating on this node (not just a test)
  * RET SLURM_SUCCESS or error code
  */
 extern int gres_plugin_job_dealloc(List job_gres_list, List node_gres_list,
 				   int node_offset, uint32_t job_id,
 				   char *node_name, bool old_job,
-				   uint32_t user_id)
+				   uint32_t user_id, bool job_fini)
 {
 	int i, rc, rc2;
 	ListIterator job_gres_iter,  node_gres_iter;
@@ -10099,7 +10099,7 @@ extern int gres_plugin_job_dealloc(List job_gres_list, List node_gres_list,
 		rc2 = _job_dealloc(job_gres_ptr->gres_data,
 				   node_gres_ptr->gres_data, node_offset,
 				   gres_name, job_id, node_name, old_job,
-				   job_gres_ptr->plugin_id, user_id);
+				   job_gres_ptr->plugin_id, user_id, job_fini);
 		if (rc2 != SLURM_SUCCESS)
 			rc = rc2;
 	}

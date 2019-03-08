@@ -998,12 +998,13 @@ extern void gres_plugin_job_clear(List job_gres_list);
  *		    some incorrect internal bookkeeping, but does not cause
  *		    failures in terms of allocating GRES to jobs.
  * IN user_id     - job's user ID
+ * IN: job_fini   - job fully terminating on this node (not just a test)
  * RET SLURM_SUCCESS or error code
  */
 extern int gres_plugin_job_dealloc(List job_gres_list, List node_gres_list,
 				   int node_offset, uint32_t job_id,
 				   char *node_name, bool old_job,
-				   uint32_t user_id);
+				   uint32_t user_id, bool job_fini);
 
 /*
  * Merge one job's gres allocation into another job's gres allocation.
