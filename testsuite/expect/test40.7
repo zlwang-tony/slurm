@@ -257,16 +257,21 @@ if {$match != 3} {
 }
 
 #
-# Now check for job concurrency and GPU use
+# Now check for job concurrency and GPU use.
+# Use GPU/MPS index information from "scontrol -dd show job" rather than
+# CUDA_VISIBLE_DEVICES environment variable, which will always be zero if
+# task/cgroup is used to constrain devices.
+#
+# Check output from second job
 #
 if {$concurrent_2_1 == 1} {
 	if {$gpu_index2 == $gpu_index2} {
-		send_user "\nFirst and second jobs run currently on the same GPU, PERFECT!\n"
+		send_user "\nSecond and first jobs run currently on the same GPU, PERFECT!\n"
 	} else {
-		send_user "\nFirst and second jobs run currently on the different GPUs, fine\n"
+		send_user "\nSecond and first jobs run currently on the different GPUs, fine\n"
 	}
 } else {
-	send_user "\nFirst and second jobs at different times, fine\n"
+	send_user "\nSecond and first jobs at different times, fine\n"
 }
 if {$concurrent_2_3 == 1} {
 	if {$gpu_index2 == $gpu_index3} {
@@ -278,15 +283,18 @@ if {$concurrent_2_3 == 1} {
 } else {
 	send_user "\nSecond and third jobs at different times, fine\n"
 }
+#
+# Check output from third job
+#
 if {$concurrent_3_1 == 1} {
 	if {$gpu_index3 == $gpu_index1} {
-		send_user "\nFAILURE: First and third jobs run currently on the same GPU\n"
+		send_user "\nFAILURE: Third and first jobs run currently on the same GPU\n"
 		set exit_code 1
 	} else {
-		send_user "\nFirst and third jobs run currently on the different GPUs, PERFECT!\n"
+		send_user "\nThird and first jobs run currently on the different GPUs, PERFECT!\n"
 	}
 } else {
-	send_user "\nFirst and third jobs at different times, fine\n"
+	send_user "\nThird and first jobs at different times, fine\n"
 }
 if {$concurrent_3_2 == 1} {
 	if {$gpu_index3 == $gpu_index2} {
