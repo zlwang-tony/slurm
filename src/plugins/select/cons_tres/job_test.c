@@ -589,7 +589,8 @@ extern int rm_job_res(struct part_res_record *part_record_ptr,
 				gres_list = node_ptr->gres_list;
 			gres_plugin_job_dealloc(job_ptr->gres_list, gres_list,
 						n, job_ptr->job_id,
-						node_ptr->name, old_job);
+						node_ptr->name, old_job,
+						job_ptr->user_id);
 			gres_plugin_node_state_log(gres_list, node_ptr->name);
 		}
 
@@ -5815,7 +5816,8 @@ static avail_res_t *_can_job_run_on_node(struct job_record *job_ptr,
 					select_node_record[node_i].tot_sockets,
 					select_node_record[node_i].cores,
 					job_ptr->job_id, node_ptr->name,
-					enforce_binding, s_p_n, &req_sock_map);
+					enforce_binding, s_p_n, &req_sock_map,
+					job_ptr->user_id, node_i);
 		if (!sock_gres_list)	/* GRES requirement fail */
 			return NULL;
 	}

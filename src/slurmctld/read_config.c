@@ -1457,7 +1457,8 @@ int read_slurm_conf(int recover, bool reconfig)
 		_acct_restore_active_jobs();
 
 	/* Sync select plugin with synchronized job/node/part data */
-	select_g_reconfigure();
+	gres_plugin_reconfig();		/* Clear gres/mps counters */
+	select_g_reconfigure()
 	if (reconfig && (slurm_mcs_reconfig() != SLURM_SUCCESS))
 		fatal("Failed to reconfigure mcs plugin");
 

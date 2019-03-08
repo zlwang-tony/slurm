@@ -2358,7 +2358,8 @@ static int _rm_job_from_nodes(struct cr_record *cr_ptr,
 				gres_list = node_ptr->gres_list;
 			gres_plugin_job_dealloc(job_ptr->gres_list, gres_list,
 						node_offset, job_ptr->job_id,
-						node_ptr->name, old_job);
+						node_ptr->name, old_job,
+						job_ptr->user_id);
 			gres_plugin_node_state_log(gres_list, node_ptr->name);
 		}
 
@@ -2760,7 +2761,8 @@ static int _rm_job_from_one_node(struct job_record *job_ptr,
 	else
 		gres_list = node_ptr->gres_list;
 	gres_plugin_job_dealloc(job_ptr->gres_list, gres_list, node_offset,
-				job_ptr->job_id, node_ptr->name, old_job);
+				job_ptr->job_id, node_ptr->name, old_job,
+				job_ptr->user_id);
 	gres_plugin_node_state_log(gres_list, node_ptr->name);
 
 	return _decr_node_job_cnt(node_inx, job_ptr, pre_err);
@@ -2841,7 +2843,7 @@ static int _add_job_to_nodes(struct cr_record *cr_ptr,
 			gres_plugin_job_alloc(job_ptr->gres_list, gres_list,
 					      node_cnt, i, node_offset,
 					      job_ptr->job_id, node_ptr->name,
-					      NULL);
+					      NULL, job_ptr->user_id);
 			gres_plugin_node_state_log(gres_list, node_ptr->name);
 		}
 
@@ -3113,7 +3115,7 @@ static void _init_node_cr(void)
 						      i, node_offset,
 						      job_ptr->job_id,
 						      node_ptr->name,
-						      NULL);
+						      NULL, job_ptr->user_id);
 			}
 
 			part_cr_ptr = cr_ptr->nodes[i].parts;

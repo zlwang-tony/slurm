@@ -229,7 +229,8 @@ static int _add_job_to_res(struct job_record *job_ptr, int action)
 			gres_plugin_job_alloc(job_ptr->gres_list,
 					      node_gres_list, job->nhosts,
 					      i, n, job_ptr->job_id,
-					      node_ptr->name, core_bitmap);
+					      node_ptr->name, core_bitmap,
+					      job_ptr->user_id);
 			gres_plugin_node_state_log(node_gres_list,
 						   node_ptr->name);
 			FREE_NULL_BITMAP(core_bitmap);
@@ -1375,7 +1376,7 @@ extern int select_p_job_resized(struct job_record *job_ptr,
 			gres_list = node_ptr->gres_list;
 		gres_plugin_job_dealloc(job_ptr->gres_list, gres_list, n,
 					job_ptr->job_id, node_ptr->name,
-					old_job);
+					old_job, job_ptr->user_id);
 		gres_plugin_node_state_log(gres_list, node_ptr->name);
 
 		if (node_usage[i].alloc_memory < job->memory_allocated[n]) {
