@@ -2114,6 +2114,27 @@ alloc_job:
 		for (i = i_first, j = 0; i <= i_last; i++) {
 			if (!bit_test(job_res->node_bitmap, i))
 				continue;
+			avail_mem = select_node_record[i].real_memory -
+				    select_node_record[i].mem_spec_limit;
+			if (!test_only) {
+				if (node_usage[i].alloc_memory > avail_mem) {
+					error("%s: node %s memory is already overallocated",
+					      __func__,
+					      select_node_record[i].node_ptr->name);
+					error_code = SLURM_ERROR;
+					break;
+				}
+				avail_mem -= node_usage[i].alloc_memory;
+			}
+			if ((job_res->cpus[j] * save_mem) > avail_mem) {
+				error("%s: %pJ would overallocate node %s memory (job (cpus=%hu * mem-per-cpu=%"PRIu64") > node avail_mem=%"PRIu64")",
+				     __func__, job_ptr,
+				     select_node_record[i].node_ptr->name,
+				     job_res->cpus[j], save_mem,
+				     avail_mem);
+				error_code = SLURM_ERROR;
+				break;
+			}
 			job_res->memory_allocated[j] =
 					job_res->cpus[j] * save_mem;
 			j++;
@@ -2123,6 +2144,27 @@ alloc_job:
 		for (i = i_first, j = 0; i <= i_last; i++) {
 			if (!bit_test(job_res->node_bitmap, i))
 				continue;
+			avail_mem = select_node_record[i].real_memory -
+				    select_node_record[i].mem_spec_limit;
+			if (!test_only) {
+				if (node_usage[i].alloc_memory > avail_mem) {
+					error("%s: node %s memory is already overallocated",
+					      __func__,
+					      select_node_record[i].node_ptr->name
+					      );
+					error_code = SLURM_ERROR;
+					break;
+				}
+				avail_mem -= node_usage[i].alloc_memory;
+			}
+			if (save_mem > avail_mem) {
+				error("%s: %pJ would overallocate node %s memory (job mem=%"PRIu64" > node avail_mem=%"PRIu64")",
+				     __func__, job_ptr,
+				     select_node_record[i].node_ptr->name,
+				     save_mem, avail_mem);
+				error_code = SLURM_ERROR;
+				break;
+			}
 			job_res->memory_allocated[j] =
 					job_res->cpus[j] * save_mem;
 			j++;
@@ -2133,12 +2175,31 @@ alloc_job:
 				continue;
 			avail_mem = select_node_record[i].real_memory -
 				    select_node_record[i].mem_spec_limit;
+			if (!test_only) {
+				if (node_usage[i].alloc_memory > avail_mem) {
+					error("%s: node %s memory is already overallocated",
+					      __func__,
+					      select_node_record[i].node_ptr->name
+					      );
+					error_code = SLURM_ERROR;
+					break;
+				} else if (node_usage[i].alloc_memory > 0) {
+					error("%s: node %s has already alloc_memory=%"PRIu64". Can't allocate all memory on node.",
+					      __func__,
+					      select_node_record[i].node_ptr->name,
+					      node_usage[i].alloc_memory);
+					error_code = SLURM_ERROR;
+					break;
+				}
+			}
 			if ((j == 0) || (lowest_mem > avail_mem))
 				lowest_mem = avail_mem;
 			job_res->memory_allocated[j++] = avail_mem;
 		}
 		details_ptr->pn_min_memory = lowest_mem;
 	}
+	if (error_code == SLURM_ERROR)
+		free_job_resources(&job_ptr->job_resrcs);
 
 	return error_code;
 }

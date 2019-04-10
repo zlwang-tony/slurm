@@ -30,6 +30,7 @@ documents those changes that are of interest to users and administrators.
  -- Add alloc_booting_nodes SchedulerParameter to allow jobs to be placed on
     booting nodes.
  -- Changed "scontrol reboot" to not default to ALL nodes.
+ -- select/cons_tres - prevent job from overallocating a node memory.
 
 * Changes in Slurm 19.05.0pre3
 ==============================
