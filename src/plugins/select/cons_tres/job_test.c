@@ -1302,7 +1302,7 @@ static int _job_test(struct job_record *job_ptr, bitstr_t *node_bitmap,
 	bool test_only;
 	uint32_t sockets_per_node = 1;
 	uint32_t c, j, n, csize, total_cpus;
-	uint64_t save_mem = 0;
+	uint64_t save_mem = 0, avail_mem = 0, lowest_mem = 0;
 	int32_t build_cnt;
 	job_resources_t *job_res;
 	struct job_details *details_ptr = job_ptr->details;
@@ -2100,28 +2100,34 @@ alloc_job:
 
 	/* load memory allocated array */
 	save_mem = details_ptr->pn_min_memory;
+	i_first = bit_ffs(job_res->node_bitmap);
+	if (i_first != -1)
+		i_last = bit_fls(job_res->node_bitmap);
+	else
+		i_last = -2;
 	if (!(job_ptr->bit_flags & JOB_MEM_SET) &&
 	    gres_plugin_job_mem_set(job_ptr->gres_list, job_res)) {
 		debug("%pJ memory set via GRES limit", job_ptr);
 	} else if (save_mem & MEM_PER_CPU) {
 		/* memory is per-cpu */
 		save_mem &= (~MEM_PER_CPU);
-		for (i = 0; i < job_res->nhosts; i++) {
-			job_res->memory_allocated[i] = job_res->cpus[i] *
-						       save_mem;
+		for (i = i_first, j = 0; i <= i_last; i++) {
+			if (!bit_test(job_res->node_bitmap, i))
+				continue;
+			job_res->memory_allocated[j] =
+					job_res->cpus[j] * save_mem;
+			j++;
 		}
 	} else if (save_mem) {
 		/* memory is per-node */
-		for (i = 0; i < job_res->nhosts; i++) {
-			job_res->memory_allocated[i] = save_mem;
+		for (i = i_first, j = 0; i <= i_last; i++) {
+			if (!bit_test(job_res->node_bitmap, i))
+				continue;
+			job_res->memory_allocated[j] =
+					job_res->cpus[j] * save_mem;
+			j++;
 		}
 	} else {	/* --mem=0, allocate job all memory on node */
-		uint64_t avail_mem, lowest_mem = 0;
-		i_first = bit_ffs(job_res->node_bitmap);
-		if (i_first != -1)
-			i_last  = bit_fls(job_res->node_bitmap);
-		else
-			i_last = -2;
 		for (i = i_first, j = 0; i <= i_last; i++) {
 			if (!bit_test(job_res->node_bitmap, i))
 				continue;
