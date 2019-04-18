@@ -911,6 +911,43 @@ extern bool deadline_ok(struct job_record *job_ptr, char *func)
 	return true;
 }
 
+/*
+ * When an array job is rejected for some reason, the remaining array tasks will
+ * get skipped by both the main scheduler and the backfill scheduler (it's an
+ * optimization). Hence, their reasons should match the reason of the first job.
+ * This function sets those reasons.
+ *
+ * job_ptr		The current job being evaluated, after it has gone
+ * 			through the scheduling loop.
+ * reject_arr_job	A pointer to the first job (array task) in the most
+ * 			recently rejected array. If job_ptr belongs to the same
+ * 			array and partition as reject_arr_job, then set
+ * 			job_ptr's reason to match reject_arr_job.
+ */
+extern void fill_array_reasons(struct job_record *job_ptr,
+			       struct job_record *reject_arr_job)
+{
+	// Check existence and don't operate on self
+	if (!reject_arr_job || (job_ptr == reject_arr_job) ||
+	    !reject_arr_job->array_job_id ||
+	    !reject_arr_job->part_ptr)
+		return;
+
+	// If the current job is part of the rejected job array...
+	if ((job_ptr->array_job_id == reject_arr_job->array_job_id) &&
+	    (job_ptr->part_ptr     == reject_arr_job->part_ptr)) {
+		// And if the reason isn't properly set yet...
+		if (job_ptr->state_reason != reject_arr_job->state_reason) {
+			// Set the reason for the subsequent array task
+			xfree(job_ptr->state_desc);
+			job_ptr->state_reason = reject_arr_job->state_reason;
+			debug3("Setting reason of array task %pJ to %s",
+			       job_ptr,
+			       job_reason_string(job_ptr->state_reason));
+		} // else it's already properly set
+	}
+}
+
 static int _schedule(uint32_t job_limit)
 {
 	ListIterator job_iterator = NULL, part_iterator = NULL;
@@ -942,9 +979,7 @@ static int _schedule(uint32_t job_limit)
 	static int defer_rpc_cnt = 0;
 	static bool reduce_completing_frag = false;
 	time_t now, last_job_sched_start, sched_start;
-	uint32_t reject_array_job_id = 0;
-	struct part_record *reject_array_part = NULL;
-	uint16_t reject_state_reason = WAIT_NO_REASON;
+	struct job_record *reject_arr_first_job = NULL;
 	bool fail_by_part;
 	uint32_t deadline_time_limit, save_time_limit = 0;
 	uint32_t prio_reserve;
@@ -1285,7 +1320,11 @@ static int _schedule(uint32_t job_limit)
 		slurmctld_diag_stats.schedule_queue_len = list_count(job_queue);
 		sort_job_queue(job_queue);
 	}
+	job_ptr = NULL;
 	while (1) {
+		/* Run some final guaranteed logic after each job iteration */
+		if (job_ptr)
+			fill_array_reasons(job_ptr, reject_arr_first_job);
 		if (fifo_sched) {
 			if (job_ptr && part_iterator &&
 			    IS_JOB_PENDING(job_ptr)) /* test job in next part */
@@ -1385,21 +1424,20 @@ next_task:
 		}
 
 		if ((job_ptr->array_task_id != NO_VAL) || job_ptr->array_recs) {
-			if ((reject_array_job_id == job_ptr->array_job_id) &&
-			    (reject_array_part   == job_ptr->part_ptr)) {
-				xfree(job_ptr->state_desc);
-				job_ptr->state_reason = reject_state_reason;
+			if (reject_arr_first_job &&
+			    reject_arr_first_job->array_job_id &&
+			    reject_arr_first_job->part_ptr &&
+			    (job_ptr->array_job_id ==
+				reject_arr_first_job->array_job_id) &&
+			    (job_ptr->part_ptr ==
+				reject_arr_first_job->part_ptr))
 				continue;  /* already rejected array element */
-			}
 
 			/* assume reject whole array for now, clear if OK */
-			reject_array_job_id = job_ptr->array_job_id;
-			reject_array_part   = job_ptr->part_ptr;
+			reject_arr_first_job = job_ptr;
 
-			if (!job_array_start_test(job_ptr)) {
-				reject_state_reason = job_ptr->state_reason;
+			if (!job_array_start_test(job_ptr))
 				continue;
-			}
 		}
 		if (max_jobs_per_part) {
 			bool skip_job = false;
@@ -1704,8 +1742,9 @@ skip_start:
 			/* job initiated */
 			sched_debug3("%pJ initiated", job_ptr);
 			last_job_update = now;
-			reject_array_job_id = 0;
-			reject_array_part   = NULL;
+			/* Clear assumed rejected array status */
+			if (reject_arr_first_job)
+				reject_arr_first_job = NULL;
 
 			/* synchronize power layouts key/values */
 			if ((powercap_get_cluster_current_cap() != 0) &&
@@ -1819,13 +1858,6 @@ fail_this_part:	if (fail_by_part) {
 			failed_parts[failed_part_cnt++] = job_ptr->part_ptr;
 			bit_and_not(avail_node_bitmap,
 				    job_ptr->part_ptr->node_bitmap);
-		}
-
-		if ((reject_array_job_id == job_ptr->array_job_id) &&
-		    (reject_array_part   == job_ptr->part_ptr)) {
-			/* All other elements of this job array get the
-			 * same reason */
-			reject_state_reason = job_ptr->state_reason;
 		}
 	}
 

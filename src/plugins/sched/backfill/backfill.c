@@ -1485,7 +1485,7 @@ static int _attempt_backfill(void)
 	job_queue_rec_t *job_queue_rec;
 	int bb, i, j, node_space_recs, mcs_select = 0;
 	slurmdb_qos_rec_t *qos_ptr = NULL;
-	struct job_record *job_ptr;
+	struct job_record *job_ptr  = NULL;
 	struct part_record *part_ptr;
 	uint32_t end_time, end_reserve, deadline_time_limit, boot_time;
 	uint32_t orig_end_time;
@@ -1500,8 +1500,7 @@ static int _attempt_backfill(void)
 	int rc = 0, error_code;
 	int job_test_count = 0, test_time_count = 0, pend_time;
 	bool already_counted, many_rpcs = false;
-	uint32_t reject_array_job_id = 0;
-	struct part_record *reject_array_part = NULL;
+	struct job_record *reject_arr_first_job = NULL;
 	uint32_t start_time;
 	time_t config_update = slurmctld_conf.last_update;
 	time_t part_update = last_part_update;
@@ -1596,11 +1595,15 @@ static int _attempt_backfill(void)
 	/* Ignore nodes that have been set as available during this cycle. */
 	bit_clear_all(bf_ignore_node_bitmap);
 
+
 	while (1) {
 		uint32_t bf_array_task_id, bf_job_priority,
 			prio_reserve;
 		bool get_boot_time = false;
 
+		/* Run some final guaranteed logic after each job iteration */
+		if (job_ptr)
+			fill_array_reasons(job_ptr, reject_arr_first_job);
 		job_queue_rec = (job_queue_rec_t *) list_pop(job_queue);
 		if (!job_queue_rec) {
 			if (debug_flags & DEBUG_FLAG_BACKFILL)
@@ -1852,13 +1855,17 @@ next_task:
 		if (!_job_part_valid(job_ptr, part_ptr))
 			continue;	/* Partition change during lock yield */
 		if ((job_ptr->array_task_id != NO_VAL) || job_ptr->array_recs) {
-			if ((reject_array_job_id == job_ptr->array_job_id) &&
-			    (reject_array_part   == part_ptr))
+			if (reject_arr_first_job &&
+			    reject_arr_first_job->array_job_id &&
+			    reject_arr_first_job->part_ptr &&
+			    (job_ptr->array_job_id ==
+				reject_arr_first_job->array_job_id) &&
+			    (job_ptr->part_ptr ==
+				reject_arr_first_job->part_ptr))
 				continue;  /* already rejected array element */
 
 			/* assume reject whole array for now, clear if OK */
-			reject_array_job_id = job_ptr->array_job_id;
-			reject_array_part   = part_ptr;
+			reject_arr_first_job = job_ptr;
 
 			if (!job_array_start_test(job_ptr))
 				continue;
@@ -2399,8 +2406,10 @@ skip_start:
 				later_start = 0;
 			} else {
 				/* Started this job, move to next one */
-				reject_array_job_id = 0;
-				reject_array_part   = NULL;
+
+				/* Clear assumed rejected array status */
+				if (reject_arr_first_job)
+					reject_arr_first_job = NULL;
 
 				/* Update the database if job time limit
 				 * changed and move to next job */
@@ -2609,9 +2618,9 @@ skip_start:
 			}
 			job_ptr->part_ptr->bf_data->resv_usage->count++;
 		}
-
-		reject_array_job_id = 0;
-		reject_array_part   = NULL;
+		/* Clear assumed rejected array status */
+		if (reject_arr_first_job)
+			reject_arr_first_job = NULL;
 		xfree(job_ptr->sched_nodes);
 		job_ptr->sched_nodes = bitmap2node_name(avail_bitmap);
 		bit_not(avail_bitmap);
