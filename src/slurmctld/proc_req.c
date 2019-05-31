@@ -1123,13 +1123,14 @@ static int _pack_job_cancel(void *x, void *arg)
 	struct job_record *job_ptr = (struct job_record *) x;
 	time_t now = time(NULL);
 
-	info("Cancelling aborted pack job submit: %pJ", job_ptr);
+	debug("Purging aborted pack job submit: %pJ", job_ptr);
 	job_ptr->job_state	= JOB_CANCELLED;
 	job_ptr->start_time	= now;
 	job_ptr->end_time	= now;
 	job_ptr->exit_code	= 1;
-	job_completion_logger(job_ptr, false);
-	fed_mgr_job_complete(job_ptr, 0, now);
+	job_ptr->pack_job_list = NULL;
+	acct_policy_remove_job_submit(job_ptr);
+	purge_job_record(job_ptr->job_id);
 
 	return 0;
 }
@@ -1489,8 +1490,8 @@ static void _slurm_rpc_allocate_pack(slurm_msg_t * msg)
 	if (error_code) {
 		/* Cancel remaining job records */
 		(void) list_for_each(submit_job_list, _pack_job_cancel, NULL);
-		if (!first_job_ptr)
-			FREE_NULL_LIST(submit_job_list);
+
+		FREE_NULL_LIST(submit_job_list);
 	} else {
 		char *pack_job_id_set = NULL;
 		ListIterator iter;
@@ -4482,10 +4483,8 @@ send_msg:
 		if (submit_job_list) {
 			(void) list_for_each(submit_job_list, _pack_job_cancel,
 					     NULL);
-			if (first_job_ptr)
-				first_job_ptr->pack_job_list = submit_job_list;
-			else
-				FREE_NULL_LIST(submit_job_list);
+
+			FREE_NULL_LIST(submit_job_list);
 		}
 	} else {
 		info("%s: JobId=%u %s", __func__, pack_job_id, TIME_STR);
