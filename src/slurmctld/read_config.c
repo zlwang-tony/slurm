@@ -1001,11 +1001,11 @@ static void _validate_pack_jobs(void)
 		if (job_ptr->pack_job_offset != 0) {
 			pack_job_ptr = find_job_record(job_ptr->pack_job_id);
 			if (!pack_job_ptr) {
-				error("Could not find package leader (JobId=%u) of %pJ. Aborting and removing job as it is corrupted.",
-						job_ptr->pack_job_id, job_ptr);
+				error("Could not find pack leader (JobId=%u) of %pJ. Aborting and removing job as it is corrupted.",
+				      job_ptr->pack_job_id, job_ptr);
 				_abort_job(job_ptr, JOB_FAILED, FAIL_SYSTEM,
 					   "invalid pack_job_id_set");
-				if(list_delete_item(job_iterator) != 1)
+				if (list_delete_item(job_iterator) != 1)
 					error("Not able to remove the job.");
 				continue;
 			}
@@ -1026,7 +1026,7 @@ static void _validate_pack_jobs(void)
 			      job_ptr, job_ptr->pack_job_id_set);
 			_abort_job(job_ptr, JOB_FAILED, FAIL_SYSTEM,
 				   "invalid pack_job_id_set");
-			if(list_delete_item(job_iterator) != 1)
+			if (list_delete_item(job_iterator) != 1)
 				error("Not able to remove the job.");
 			continue;
 		}
