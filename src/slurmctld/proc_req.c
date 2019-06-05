@@ -1338,7 +1338,6 @@ static void _slurm_rpc_allocate_pack(slurm_msg_t * msg)
 	slurm_addr_t resp_addr;
 	char resp_host[16];
 	uint16_t port;	/* dummy value */
-	char *pack_job_id_set = NULL;
 
 	START_TIMER;
 
@@ -1487,29 +1486,22 @@ static void _slurm_rpc_allocate_pack(slurm_msg_t * msg)
 		error_code = ESLURM_ACCOUNTING_POLICY;
         }
 
-	/* Set the pack_job_id_set */
-	_create_pack_job_id_set(jobid_hostset, pack_job_offset,
-				&pack_job_id_set);
-
-	if (first_job_ptr)
-		first_job_ptr->pack_job_list = submit_job_list;
-	iter = list_iterator_create(submit_job_list);
-	while ((job_ptr = (struct job_record *) list_next(iter))) {
-		job_ptr->pack_job_id_set = xstrdup(pack_job_id_set);
-	}
-	list_iterator_destroy(iter);
-	xfree(pack_job_id_set);
-
 	if (error_code) {
 		/* Cancel remaining job records */
 		(void) list_for_each(submit_job_list, _pack_job_cancel, NULL);
 		if (!first_job_ptr)
 			FREE_NULL_LIST(submit_job_list);
 	} else {
+		char *pack_job_id_set = NULL;
 		ListIterator iter;
+
+		_create_pack_job_id_set(jobid_hostset, pack_job_offset,
+					&pack_job_id_set);
+
 		inx = 0;
 		iter = list_iterator_create(submit_job_list);
 		while ((job_ptr = (struct job_record *) list_next(iter))) {
+			job_ptr->pack_job_id_set = xstrdup(pack_job_id_set);
 			if (!resp)
 				resp = list_create(_del_alloc_pack_msg);
 			list_append(resp,
@@ -1522,6 +1514,7 @@ static void _slurm_rpc_allocate_pack(slurm_msg_t * msg)
 			}
 		}
 		list_iterator_destroy(iter);
+		xfree(pack_job_id_set);
 	}
 	unlock_slurmctld(job_write_lock);
 	_throttle_fini(&active_rpc_cnt);
@@ -4249,7 +4242,6 @@ static void _slurm_rpc_submit_batch_pack_job(slurm_msg_t *msg)
 	List submit_job_list = NULL;
 	hostset_t jobid_hostset = NULL;
 	char tmp_str[32];
-	char *pack_job_id_set = NULL;
 
 	START_TIMER;
 	debug2("Processing RPC: REQUEST_SUBMIT_BATCH_PACK_JOB from uid=%d",
@@ -4441,21 +4433,25 @@ static void _slurm_rpc_submit_batch_pack_job(slurm_msg_t *msg)
 		reject_job = true;
 	}
 
-	_create_pack_job_id_set(jobid_hostset, pack_job_offset,
-				&pack_job_id_set);
-	if (first_job_ptr)
+	if (!reject_job) {
+		char *pack_job_id_set = NULL;
+
+		_create_pack_job_id_set(jobid_hostset, pack_job_offset,
+					&pack_job_id_set);
+
 		first_job_ptr->pack_job_list = submit_job_list;
 
-	iter = list_iterator_create(submit_job_list);
-	while ((job_ptr = (struct job_record *) list_next(iter))) {
-		job_ptr->pack_job_id_set = xstrdup(pack_job_id_set);
-		if ((error_code == SLURM_SUCCESS) &&
-		    (slurmctld_conf.debug_flags & DEBUG_FLAG_HETERO_JOBS)) {
-			info("Submit %pJ", job_ptr);
+		iter = list_iterator_create(submit_job_list);
+		while ((job_ptr = (struct job_record *) list_next(iter))) {
+			job_ptr->pack_job_id_set = xstrdup(pack_job_id_set);
+			if (slurmctld_conf.debug_flags &
+			    DEBUG_FLAG_HETERO_JOBS) {
+				info("Submit %pJ", job_ptr);
+			}
 		}
+		list_iterator_destroy(iter);
+		xfree(pack_job_id_set);
 	}
-	list_iterator_destroy(iter);
-	xfree(pack_job_id_set);
 
 	unlock_slurmctld(job_write_lock);
 	_throttle_fini(&active_rpc_cnt);
