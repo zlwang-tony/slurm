@@ -927,24 +927,24 @@ extern bool deadline_ok(struct job_record *job_ptr, char *func)
 extern void fill_array_reasons(struct job_record *job_ptr,
 			       struct job_record *reject_arr_job)
 {
-	// Check existence and don't operate on self
+	/* Check existence and don't operate on self */
 	if (!reject_arr_job || (job_ptr == reject_arr_job) ||
 	    !reject_arr_job->array_job_id ||
 	    !reject_arr_job->part_ptr)
 		return;
 
-	// If the current job is part of the rejected job array...
+	/* If the current job is part of the rejected job array... */
 	if ((job_ptr->array_job_id == reject_arr_job->array_job_id) &&
 	    (job_ptr->part_ptr     == reject_arr_job->part_ptr)) {
-		// And if the reason isn't properly set yet...
+		/* And if the reason isn't properly set yet... */
 		if (job_ptr->state_reason != reject_arr_job->state_reason) {
-			// Set the reason for the subsequent array task
+			/* Set the reason for the subsequent array task */
 			xfree(job_ptr->state_desc);
 			job_ptr->state_reason = reject_arr_job->state_reason;
 			debug3("Setting reason of array task %pJ to %s",
 			       job_ptr,
 			       job_reason_string(job_ptr->state_reason));
-		} // else it's already properly set
+		} /* else it's already properly set */
 	}
 }
 
@@ -1320,6 +1320,7 @@ static int _schedule(uint32_t job_limit)
 		slurmctld_diag_stats.schedule_queue_len = list_count(job_queue);
 		sort_job_queue(job_queue);
 	}
+
 	job_ptr = NULL;
 	while (1) {
 		/* Run some final guaranteed logic after each job iteration */
@@ -1742,6 +1743,7 @@ skip_start:
 			/* job initiated */
 			sched_debug3("%pJ initiated", job_ptr);
 			last_job_update = now;
+
 			/* Clear assumed rejected array status */
 			if (reject_arr_first_job)
 				reject_arr_first_job = NULL;

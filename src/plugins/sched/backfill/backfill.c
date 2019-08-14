@@ -1595,7 +1595,6 @@ static int _attempt_backfill(void)
 	/* Ignore nodes that have been set as available during this cycle. */
 	bit_clear_all(bf_ignore_node_bitmap);
 
-
 	while (1) {
 		uint32_t bf_array_task_id, bf_job_priority,
 			prio_reserve;
@@ -2408,8 +2407,7 @@ skip_start:
 				/* Started this job, move to next one */
 
 				/* Clear assumed rejected array status */
-				if (reject_arr_first_job)
-					reject_arr_first_job = NULL;
+				reject_arr_first_job = NULL;
 
 				/* Update the database if job time limit
 				 * changed and move to next job */
@@ -2618,9 +2616,10 @@ skip_start:
 			}
 			job_ptr->part_ptr->bf_data->resv_usage->count++;
 		}
+
 		/* Clear assumed rejected array status */
-		if (reject_arr_first_job)
-			reject_arr_first_job = NULL;
+		reject_arr_first_job = NULL;
+
 		xfree(job_ptr->sched_nodes);
 		job_ptr->sched_nodes = bitmap2node_name(avail_bitmap);
 		bit_not(avail_bitmap);
