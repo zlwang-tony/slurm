@@ -102,6 +102,7 @@ host_triplet = @host@
 target_triplet = @target@
 noinst_PROGRAMS = libcommon.o$(EXEEXT) libeio.o$(EXEEXT) \
 	libspank.o$(EXEEXT)
+@HAVE_LUA_TRUE@am__append_1 = $(lua_LIBS)
 subdir = src/common
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/auxdir/ax_check_compile_flag.m4 \
@@ -738,7 +739,8 @@ libspank_la_SOURCES = \
 	optz.c      optz.h
 
 libcommon_la_LIBADD = $(DL_LIBS)
-libcommon_la_LDFLAGS = $(LIB_LDFLAGS) -module --export-dynamic
+libcommon_la_LDFLAGS = $(LIB_LDFLAGS) -module --export-dynamic \
+	$(am__append_1)
 
 # This was made so we could export all symbols from libcommon
 # on multiple platforms

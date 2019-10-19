@@ -158,6 +158,9 @@ libspank_la_SOURCES = \
 libcommon_la_LIBADD   = $(DL_LIBS)
 
 libcommon_la_LDFLAGS  = $(LIB_LDFLAGS) -module --export-dynamic
+if HAVE_LUA
+libcommon_la_LDFLAGS += $(lua_LIBS)
+endif
 
 # This was made so we could export all symbols from libcommon
 # on multiple platforms
