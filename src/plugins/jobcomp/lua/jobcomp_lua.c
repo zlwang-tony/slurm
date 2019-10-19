@@ -82,10 +82,9 @@ static lua_State *L = NULL;
 static time_t lua_script_last_loaded = (time_t) 0;
 static int _job_rec_field_index(lua_State *L);
 static void _push_job_rec(struct job_record *job_ptr);
-static int _update_admin_comment(lua_State *L);
+static int _set_job_rec_field_index(lua_State *L);
 
 static const struct luaL_Reg slurm_functions[] = {
-        { "update_admin_comment",_update_admin_comment },
         { NULL,         NULL        }
 };
 
@@ -142,10 +141,6 @@ int slurm_jobcomp_log_record(struct job_record *job_ptr)
 	 *   initialization:
 	 */
 
-	/* push a pointer to the job_record in the global environment */
-	lua_pushlightuserdata(L, (void *) job_ptr);
-	lua_setglobal(L, "_job_ptr");
-
 	lua_getglobal(L, "slurm_jobcomp_log_record");
 	if (lua_isnil(L, -1))
 		goto out;
@@ -166,10 +161,6 @@ int slurm_jobcomp_log_record(struct job_record *job_ptr)
 		lua_pop(L, 1);
 	}
 	xlua_stack_dump("jobcomp/lua", "log_record, after lua_pcall", L);
-
-	/* reset _job_ptr to NULL */
-	lua_pushlightuserdata(L, (void *) NULL);
-	lua_setglobal(L, "_job_ptr");
 
 out:	slurm_mutex_unlock(&lua_lock);
 	return rc;
@@ -230,6 +221,8 @@ static void _push_job_rec(struct job_record *job_ptr)
 	lua_newtable(L);
 	lua_pushcfunction(L, _job_rec_field_index);
 	lua_setfield(L, -2, "__index");
+	lua_pushcfunction(L, _set_job_rec_field_index);
+	lua_setfield(L, -2, "__newindex");
 	/* Store the job_ptr in the metatable, so the index
 	 * function knows which struct it's getting data for.
 	 */
@@ -251,17 +244,25 @@ static int _job_rec_field_index(lua_State *L)
 	return xlua_job_record_field(L, job_ptr, name);
 }
 
-static int _update_admin_comment(lua_State *L)
+/* Set fields in the job request structure on job submit or modify */
+static int _set_job_rec_field_index(lua_State *L)
 {
-	const char *data = NULL;
-	struct job_record *job_ptr = NULL;
-	data = luaL_checkstring(L, -1);
-	lua_getglobal(L, "_job_ptr");
-	job_ptr = (struct job_record *) lua_touserdata(L, -1);
+	const char *name, *value_str;
+	struct job_record *job_ptr;
 
-	if (job_ptr) {
+	name = luaL_checkstring(L, 2);
+	lua_getmetatable(L, -3);
+	lua_getfield(L, -1, "_job_rec_ptr");
+	job_ptr = lua_touserdata(L, -1);
+	if (job_ptr == NULL) {
+		error("%s: job_ptr is NULL", __func__);
+	} else if (!xstrcmp(name, "admin_comment")) {
+		value_str = luaL_checkstring(L, 3);
 		xfree(job_ptr->admin_comment);
-		job_ptr->admin_comment = xstrdup(data);
+		if (strlen(value_str))
+			job_ptr->admin_comment = xstrdup(value_str);
+	} else {
+		error("%s: unrecognized field: %s", __func__, name);
 	}
-	return 0;
+	return SLURM_SUCCESS;
 }
