@@ -84,7 +84,7 @@ lua_State *xlua_loadscript(lua_State *curr, const char *plugin,
 void xlua_register_slurm_output_functions(lua_State *L);
 void xlua_table_register(lua_State *L, const char *libname,
 				const luaL_Reg *l);
-int xlua_job_record_field(lua_State *L, const struct job_record *job_ptr,
+int xlua_job_record_field(lua_State *L, const job_record_t *job_ptr,
 			  const char *name);
 void xlua_stack_dump (const char *plugin, char *header, lua_State *L);
 #endif

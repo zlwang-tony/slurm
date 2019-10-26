@@ -81,7 +81,7 @@ static const char lua_script_path[] = DEFAULT_SCRIPT_DIR "/jobcomp.lua";
 static lua_State *L = NULL;
 static time_t lua_script_last_loaded = (time_t) 0;
 static int _job_rec_field_index(lua_State *L);
-static void _push_job_rec(struct job_record *job_ptr);
+static void _push_job_rec(job_record_t *job_ptr);
 static int _set_job_rec_field_index(lua_State *L);
 
 static const struct luaL_Reg slurm_functions[] = {
@@ -128,7 +128,7 @@ int slurm_jobcomp_set_location(char * location)
 	return SLURM_SUCCESS;
 }
 
-int slurm_jobcomp_log_record(struct job_record *job_ptr)
+int slurm_jobcomp_log_record(job_record_t *job_ptr)
 {
 	int rc = SLURM_ERROR;
 	slurm_mutex_lock(&lua_lock);
@@ -214,7 +214,7 @@ static int _load_script(void)
 	return SLURM_SUCCESS;
 }
 
-static void _push_job_rec(struct job_record *job_ptr)
+static void _push_job_rec(job_record_t *job_ptr)
 {
 	lua_newtable(L);
 
@@ -235,7 +235,7 @@ static void _push_job_rec(struct job_record *job_ptr)
 static int _job_rec_field_index(lua_State *L)
 {
 	const char *name = luaL_checkstring(L, 2);
-	struct job_record *job_ptr;
+	job_record_t *job_ptr;
 
 	lua_getmetatable(L, -2);
 	lua_getfield(L, -1, "_job_rec_ptr");
@@ -248,7 +248,7 @@ static int _job_rec_field_index(lua_State *L)
 static int _set_job_rec_field_index(lua_State *L)
 {
 	const char *name, *value_str;
-	struct job_record *job_ptr;
+	job_record_t *job_ptr;
 
 	name = luaL_checkstring(L, 2);
 	lua_getmetatable(L, -3);

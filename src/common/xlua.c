@@ -457,7 +457,7 @@ void xlua_register_slurm_output_functions(lua_State *L)
  * This is an incomplete list of job record fields. Add more as needed and
  * send patches to slurm-dev@schedmd.com.
  */
-int xlua_job_record_field(lua_State *L, const struct job_record *job_ptr,
+int xlua_job_record_field(lua_State *L, const job_record_t *job_ptr,
 			  const char *name)
 {
 	int i;
