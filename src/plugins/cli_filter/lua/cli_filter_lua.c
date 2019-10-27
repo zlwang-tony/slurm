@@ -54,6 +54,7 @@
 #include "src/common/plugstack.h"
 #include "src/common/slurm_opt.h"
 #include "src/common/xlua.h"
+#include "src/lua/lua_common.h"
 #include "src/plugins/cli_filter/common/cli_filter_common.h"
 
 /*

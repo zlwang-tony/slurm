@@ -47,6 +47,7 @@
 
 #include "src/common/slurm_jobcomp.h"
 #include "src/common/xlua.h"
+#include "src/lua/lua_common.h"
 #include "src/slurmctld/slurmctld.h"
 
 /*

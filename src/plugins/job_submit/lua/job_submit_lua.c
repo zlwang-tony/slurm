@@ -58,6 +58,7 @@
 #include "src/common/assoc_mgr.h"
 #include "src/common/xlua.h"
 #include "src/common/uid.h"
+#include "src/lua/lua_common.h"
 #include "src/slurmctld/locks.h"
 #include "src/slurmctld/slurmctld.h"
 #include "src/slurmctld/reservation.h"
