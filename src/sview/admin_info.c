@@ -28,7 +28,7 @@
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA.
 \*****************************************************************************/
 
-#include "src/sview/sview.h"
+#include "sview.h"
 
 #define _DEBUG 0
 
@@ -60,7 +60,7 @@ static display_data_t options_data_admin[] = {
 
 static display_data_t *local_display_data = NULL;
 
-extern void get_info_admin(GtkTable *table, display_data_t *display_data)
+extern void get_info_admin(GtkGrid *table, display_data_t *display_data)
 {
 	local_display_data = display_data;
 }
@@ -95,6 +95,7 @@ extern void row_clicked_admin(GtkTreeView *tree_view,
 	int line = get_row_number(tree_view, path);
 	GtkWidget *popup = NULL;
 	GtkWidget *label = NULL;
+	GtkWidget *vbox = NULL;
 	char *info = NULL;
 	if (line == -1) {
 		g_error("problem getting line number");
@@ -106,7 +107,8 @@ extern void row_clicked_admin(GtkTreeView *tree_view,
 	gtk_window_set_type_hint(GTK_WINDOW(popup),
 				 GDK_WINDOW_TYPE_HINT_NORMAL);
 	label = gtk_label_new(info);
-	gtk_box_pack_end(GTK_BOX(GTK_DIALOG(popup)->vbox),
+	vbox = gtk_dialog_get_content_area(GTK_DIALOG(popup));
+	gtk_box_pack_end(GTK_BOX(vbox),
 			 label, true, true, 0);
 	xfree(info);
 	gtk_widget_show(label);

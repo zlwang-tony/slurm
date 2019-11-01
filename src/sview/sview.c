@@ -41,14 +41,12 @@
 
 #include "sview.h"
 
-#define _DEBUG 0
-
 typedef struct {
-	GtkTable *table;
+	GtkGrid *grid;
 	int page_num;
 } page_thr_t;
 
-static void _get_info_tabs(GtkTable *table, display_data_t *display_data);
+static void _get_info_tabs(GtkGrid *grid, display_data_t *display_data);
 
 /* globals */
 sview_config_t default_sview_config;
@@ -76,8 +74,9 @@ gchar *global_edit_error_msg = NULL;
 GtkWidget *main_notebook = NULL;
 GtkWidget *main_statusbar = NULL;
 GtkWidget *main_window = NULL;
+GdkWindow *main_gdk_win = NULL;
 GtkWidget *grid_window = NULL;
-GtkTable *main_grid_table = NULL;
+GtkGrid *main_grid_grid = NULL;
 GMutex *sview_mutex = NULL;
 GMutex *grid_mutex = NULL;
 GCond *grid_cond = NULL;
@@ -99,21 +98,16 @@ slurm_ctl_conf_info_msg_t *g_ctl_info_ptr = NULL;
 job_step_info_response_msg_t *g_step_info_ptr = NULL;
 topo_info_response_msg_t *g_topo_info_msg_ptr = NULL;
 
-static GtkActionGroup *admin_action_group = NULL;
-static GtkActionGroup *menu_action_group = NULL;
+static slurm_ctl_conf_info_msg_t *slurm_ctl_conf_ptr = NULL;
+static menu_item_t *debug_level_menu_widget = NULL;
+static GSList *debug_level_menu_group = NULL;
 static bool debug_inited = 0;
-static int g_menu_id = 0;
-static GtkUIManager *g_ui_manager = NULL;
+/* static GtkActionGroup *admin_action_group = NULL; */
+/* static GtkActionGroup *menu_action_group = NULL; */
+/* static int g_menu_id = 0; */
+/* static GtkUIManager *g_ui_manager = NULL; */
 static GtkToggleActionEntry *debug_actions = NULL;
 static int debug_action_entries = 0;
-/*
-  popup_positioner_t main_popup_positioner[] = {
-  {0,"Sview Defaults", 150, 700 },
-  {0,"Full info for job", 450, 650 },
-  {0,"Title_2", 100, 100 },
-  {-1,"FENCE", -1, -1 }
-  };
-*/
 
 display_data_t main_display_data[] = {
 	{G_TYPE_NONE, JOB_PAGE, "Jobs", true, -1,
@@ -161,7 +155,7 @@ void *_page_thr(void *arg)
 {
 	page_thr_t *page = (page_thr_t *)arg;
 	int num = page->page_num;
-	GtkTable *table = page->table;
+	GtkGrid *grid = page->grid;
 	display_data_t *display_data = &main_display_data[num];
 	static int thread_count = 0;
 	bool reset_highlight = true;
@@ -192,12 +186,12 @@ void *_page_thr(void *arg)
 		START_TIMER;
 #endif
 //		g_mutex_lock(sview_mutex);
-		gdk_threads_enter();
+//		gdk_threads_enter();
 		sview_init_grid(reset_highlight);
 		reset_highlight=false;
-		(display_data->get_info)(table, display_data);
+		(display_data->get_info)(grid, display_data);
 		//gdk_flush();
-		gdk_threads_leave();
+//		gdk_threads_leave();
 //		g_mutex_unlock(sview_mutex);
 #if _DEBUG
 		END_TIMER;
@@ -224,26 +218,21 @@ void *_grid_init_thr(void *arg)
 {
 	guint page = 0;
 	GtkScrolledWindow *window = NULL;
-	GtkBin *bin = NULL;
-	GtkViewport *view = NULL;
-	GtkTable *table = NULL;
+	GtkGrid *grid = NULL;
 	int rc = SLURM_SUCCESS;
 
 	while (!grid_init && !fini) {
-		gdk_threads_enter();
+		//gdk_threads_enter();
 		page = gtk_notebook_get_current_page(
 			GTK_NOTEBOOK(main_notebook));
 		window = GTK_SCROLLED_WINDOW(
 			gtk_notebook_get_nth_page(GTK_NOTEBOOK(main_notebook),
 						  page));
-		bin = GTK_BIN(&window->container);
-		view = GTK_VIEWPORT(bin->child);
-		bin = GTK_BIN(&view->bin);
-		table = GTK_TABLE(bin->child);
+		grid = sview_get_grid_from_window(window);
 		/* set up the main grid */
-		rc = get_system_stats(table);
+		rc = get_system_stats(grid);
 		//gdk_flush();
-		gdk_threads_leave();
+		//gdk_threads_leave();
 
 		if (rc != SLURM_SUCCESS)
 			sleep(working_sview_config.refresh_delay);
@@ -259,7 +248,7 @@ void *_grid_init_thr(void *arg)
 }
 
 static void _page_switched(GtkNotebook     *notebook,
-			   GtkNotebookPage *page,
+			   GtkNotebookTab  *page,
 			   guint            page_num,
 			   gpointer         user_data)
 {
@@ -267,10 +256,7 @@ static void _page_switched(GtkNotebook     *notebook,
 		gtk_notebook_get_nth_page(notebook, page_num));
 	if (!window)
 		return;
-	GtkBin *bin = GTK_BIN(&window->container);
-	GtkViewport *view = GTK_VIEWPORT(bin->child);
-	GtkBin *bin2 = GTK_BIN(&view->bin);
-	GtkTable *table = GTK_TABLE(bin2->child);
+	GtkGrid *grid = sview_get_grid_from_window(window);
 	int i = 0;
 	page_thr_t *page_thr = NULL;
 	GError *error = NULL;
@@ -278,8 +264,8 @@ static void _page_switched(GtkNotebook     *notebook,
 
 
 	/*set spinning cursor while loading*/
-	if (main_window->window && (page_num != TAB_PAGE))
-		gdk_window_set_cursor(main_window->window, in_process_cursor);
+	if (main_gdk_win && (page_num != TAB_PAGE))
+		gdk_window_set_cursor(main_gdk_win, in_process_cursor);
 
 	/* make sure we aren't adding the page, and really asking for info */
 	if (adding)
@@ -312,13 +298,13 @@ static void _page_switched(GtkNotebook     *notebook,
 		   may need to be done. */
 		/* if (toggled || force_refresh) { */
 		/*	(main_display_data[i].get_info)( */
-		/*		table, &main_display_data[i]); */
+		/*		grid, &main_display_data[i]); */
 		/*	return; */
 		/* } */
 
 		page_thr = xmalloc(sizeof(page_thr_t));
 		page_thr->page_num = i;
-		page_thr->table = table;
+		page_thr->grid = grid;
 
 		if (!sview_thread_new(_page_thr, page_thr, false, &error)) {
 			g_printerr ("Failed to create page thread: %s\n",
@@ -328,138 +314,138 @@ static void _page_switched(GtkNotebook     *notebook,
 	}
 }
 
-static void _set_admin_mode(GtkToggleAction *action)
-{
-//	GtkAction *admin_action = NULL;
-	if (action)
-		working_sview_config.admin_mode
-			= gtk_toggle_action_get_active(action);
-	if (!working_sview_config.admin_mode)
-		gtk_statusbar_pop(GTK_STATUSBAR(main_statusbar),
-				  STATUS_ADMIN_MODE);
-	else
-		gtk_statusbar_push(GTK_STATUSBAR(main_statusbar),
-				   STATUS_ADMIN_MODE,
-				   "Admin mode activated! "
-				   "Think before you alter anything.");
+/* static void _set_admin_mode(GtkToggleAction *action) */
+/* { */
+/* //	GtkAction *admin_action = NULL; */
+/* 	/\* if (action) *\/ */
+/* 	/\* 	working_sview_config.admin_mode *\/ */
+/* 	/\* 		= gtk_toggle_action_get_active(action); *\/ */
+/* 	/\* if (!working_sview_config.admin_mode) *\/ */
+/* 	/\* 	gtk_statusbar_pop(GTK_STATUSBAR(main_statusbar), *\/ */
+/* 	/\* 			  STATUS_ADMIN_MODE); *\/ */
+/* 	/\* else *\/ */
+/* 	/\* 	gtk_statusbar_push(GTK_STATUSBAR(main_statusbar), *\/ */
+/* 	/\* 			   STATUS_ADMIN_MODE, *\/ */
+/* 	/\* 			   "Admin mode activated! " *\/ */
+/* 	/\* 			   "Think before you alter anything."); *\/ */
 
-	gtk_action_group_set_sensitive(admin_action_group,
-				       working_sview_config.admin_mode);
-}
+/* 	/\* gtk_action_group_set_sensitive(admin_action_group, *\/ */
+/* 	/\* 			       working_sview_config.admin_mode); *\/ */
+/* } */
 
-static void _set_grid(GtkToggleAction *action)
-{
-	if (action)
-		working_sview_config.show_grid
-			= gtk_toggle_action_get_active(action);
+/* static void _set_grid(GtkToggleAction *action) */
+/* { */
+/* 	if (action) */
+/* 		working_sview_config.show_grid */
+/* 			= gtk_toggle_action_get_active(action); */
 
-	if (cluster_flags & CLUSTER_FLAG_FED)
-		return;
+/* 	if (cluster_flags & CLUSTER_FLAG_FED) */
+/* 		return; */
 
-	if (!working_sview_config.show_grid)
-		gtk_widget_hide(grid_window);
-	else
-		gtk_widget_show(grid_window);
+/* 	if (!working_sview_config.show_grid) */
+/* 		gtk_widget_hide(grid_window); */
+/* 	else */
+/* 		gtk_widget_show(grid_window); */
 
-	return;
-}
+/* 	return; */
+/* } */
 
-static void _set_hidden(GtkToggleAction *action)
-{
-	char *tmp;
-	if (action)
-		working_sview_config.show_hidden
-			= gtk_toggle_action_get_active(action);
-	if (!working_sview_config.show_hidden)
-		tmp = g_strdup_printf(
-			"Hidden partitions and their jobs are now hidden");
-	else
-		tmp = g_strdup_printf(
-			"Hidden partitions and their jobs are now visible");
-	if (apply_hidden_change) {
-		FREE_NULL_LIST(grid_button_list);
-		get_system_stats(main_grid_table);
-	}
-	apply_hidden_change = true;
-	refresh_main(NULL, NULL);
-	display_edit_note(tmp);
-	g_free(tmp);
-	return;
-}
+/* static void _set_hidden(GtkToggleAction *action) */
+/* { */
+/* 	/\* char *tmp; *\/ */
+/* 	/\* if (action) *\/ */
+/* 	/\* 	working_sview_config.show_hidden *\/ */
+/* 	/\* 		= gtk_toggle_action_get_active(action); *\/ */
+/* 	/\* if (!working_sview_config.show_hidden) *\/ */
+/* 	/\* 	tmp = g_strdup_printf( *\/ */
+/* 	/\* 		"Hidden partitions and their jobs are now hidden"); *\/ */
+/* 	/\* else *\/ */
+/* 	/\* 	tmp = g_strdup_printf( *\/ */
+/* 	/\* 		"Hidden partitions and their jobs are now visible"); *\/ */
+/* 	/\* if (apply_hidden_change) { *\/ */
+/* 	/\* 	FREE_NULL_LIST(grid_button_list); *\/ */
+/* 	/\* 	get_system_stats(main_grid_grid); *\/ */
+/* 	/\* } *\/ */
+/* 	/\* apply_hidden_change = true; *\/ */
+/* 	/\* refresh_main(NULL, NULL); *\/ */
+/* 	/\* display_edit_note(tmp); *\/ */
+/* 	/\* g_free(tmp); *\/ */
+/* 	/\* return; *\/ */
+/* } */
 
-static void _set_page_opts(GtkToggleAction *action)
-{
-	char *tmp;
-	if (action)
-		working_sview_config.save_page_opts
-			= gtk_toggle_action_get_active(action);
-	if (working_sview_config.save_page_opts)
-		tmp = g_strdup_printf("Save Page Options now ON");
-	else
-		tmp = g_strdup_printf("Save Page Options now OFF");
+/* static void _set_page_opts(GtkToggleAction *action) */
+/* { */
+/* 	char *tmp; */
+/* 	if (action) */
+/* 		working_sview_config.save_page_opts */
+/* 			= gtk_toggle_action_get_active(action); */
+/* 	if (working_sview_config.save_page_opts) */
+/* 		tmp = g_strdup_printf("Save Page Options now ON"); */
+/* 	else */
+/* 		tmp = g_strdup_printf("Save Page Options now OFF"); */
 
-	refresh_main(NULL, NULL);
-	display_edit_note(tmp);
-	g_free(tmp);
-	return;
-}
+/* 	refresh_main(NULL, NULL); */
+/* 	display_edit_note(tmp); */
+/* 	g_free(tmp); */
+/* 	return; */
+/* } */
 
-#ifdef WANT_TOPO_ON_MAIN_OPTIONS
-static void _set_topogrid(GtkToggleAction *action)
-{
-	char *tmp;
-	int rc = SLURM_SUCCESS;
+/* #ifdef WANT_TOPO_ON_MAIN_OPTIONS */
+/* static void _set_topogrid(GtkToggleAction *action) */
+/* { */
+/* 	char *tmp; */
+/* 	int rc = SLURM_SUCCESS; */
 
-	if (action) {
-		working_sview_config.grid_topological
-			= gtk_toggle_action_get_active(action);
-	}
-	apply_hidden_change = false;
-	if (working_sview_config.grid_topological) {
-		if (!g_switch_nodes_maps)
-			rc = get_topo_conf();
-		if (rc != SLURM_SUCCESS)
-			/*denied*/
-			tmp = g_strdup_printf("Valid topology not detected");
-		else
-			tmp = g_strdup_printf("Grid changed to topology order");
+/* 	if (action) { */
+/* 		working_sview_config.grid_topological */
+/* 			= gtk_toggle_action_get_active(action); */
+/* 	} */
+/* 	apply_hidden_change = false; */
+/* 	if (working_sview_config.grid_topological) { */
+/* 		if (!g_switch_nodes_maps) */
+/* 			rc = get_topo_conf(); */
+/* 		if (rc != SLURM_SUCCESS) */
+/* 			/\*denied*\/ */
+/* 			tmp = g_strdup_printf("Valid topology not detected"); */
+/* 		else */
+/* 			tmp = g_strdup_printf("Grid changed to topology order"); */
 
-	}
-	refresh_main(NULL, NULL);
-	display_edit_note(tmp);
-	g_free(tmp);
-	return;
-}
-#endif
+/* 	} */
+/* 	refresh_main(NULL, NULL); */
+/* 	display_edit_note(tmp); */
+/* 	g_free(tmp); */
+/* 	return; */
+/* } */
+/* #endif */
 
-static void _set_ruled(GtkToggleAction *action)
-{
-	char *tmp;
-	if (action)
-		working_sview_config.ruled_treeview
-			= gtk_toggle_action_get_active(action);
-	if (!working_sview_config.ruled_treeview)
-		tmp = g_strdup_printf(
-			"Tables not ruled");
-	else
-		tmp = g_strdup_printf(
-			"Tables ruled");
+/* static void _set_ruled(GtkToggleAction *action) */
+/* { */
+/* 	char *tmp; */
+/* 	if (action) */
+/* 		working_sview_config.ruled_treeview */
+/* 			= gtk_toggle_action_get_active(action); */
+/* 	if (!working_sview_config.ruled_treeview) */
+/* 		tmp = g_strdup_printf( */
+/* 			"Tables not ruled"); */
+/* 	else */
+/* 		tmp = g_strdup_printf( */
+/* 			"Tables ruled"); */
 
-	/* get rid of each existing table */
-	cluster_change_front_end();
-	cluster_change_resv();
-	cluster_change_part();
-	cluster_change_job();
-	cluster_change_node();
-	cluster_change_bb();
+/* 	/\* get rid of each existing table *\/ */
+/* 	cluster_change_front_end(); */
+/* 	cluster_change_resv(); */
+/* 	cluster_change_part(); */
+/* 	cluster_change_job(); */
+/* 	cluster_change_node(); */
+/* 	cluster_change_bb(); */
 
-	refresh_main(NULL, NULL);
-	display_edit_note(tmp);
-	g_free(tmp);
-	return;
-}
+/* 	refresh_main(NULL, NULL); */
+/* 	display_edit_note(tmp); */
+/* 	g_free(tmp); */
+/* 	return; */
+/* } */
 
-static void _reconfigure(GtkToggleAction *action)
+static void _reconfigure(GtkWidget *widget, gpointer data)
 {
 	char *temp = NULL;
 
@@ -472,120 +458,161 @@ static void _reconfigure(GtkToggleAction *action)
 	g_free(temp);
 }
 
-static void _get_current_debug(GtkRadioAction *action)
+static int _set_debug_list(void *x, void *arg)
 {
-	static int debug_level = 0;
-	static slurm_ctl_conf_info_msg_t  *slurm_ctl_conf_ptr = NULL;
-	static GtkAction *debug_action = NULL;
-	int err_code = get_new_info_config(&slurm_ctl_conf_ptr);
+	menu_item_t *menu_item = (menu_item_t *)x;
+	int debug_level = *(int *)arg;
 
-	if (err_code != SLURM_ERROR)
-		debug_level = slurm_ctl_conf_ptr->slurmctld_debug;
+	gtk_check_menu_item_set_active(
+		GTK_CHECK_MENU_ITEM(menu_item->widget),
+		(menu_item->value == debug_level) ?
+		TRUE : FALSE);
 
-	if (!debug_action)
-		debug_action = gtk_action_group_get_action(
-			menu_action_group, "debug_quiet");
-	/* Since this is the inital value we don't signal anything
-	   changed so we need to make it happen here */
-	if (debug_level == 0)
-		debug_inited = 1;
-	sview_radio_action_set_current_value(GTK_RADIO_ACTION(debug_action),
-					     debug_level);
+	return SLURM_SUCCESS;
 }
 
-static void _get_current_debug_flags(GtkToggleAction *action)
+static void _set_debug_gtk(int debug_level)
 {
-	static uint64_t debug_flags = 0, tmp_flags;
-	static slurm_ctl_conf_info_msg_t  *slurm_ctl_conf_ptr = NULL;
-	int err_code = get_new_info_config(&slurm_ctl_conf_ptr);
-	GtkAction *debug_action = NULL;
-	GtkToggleAction *toggle_action;
-	gboolean orig_state, new_state;
-	int i;
+	static bool running = 0;
 
-	if (err_code != SLURM_ERROR)
-		debug_flags = slurm_ctl_conf_ptr->debug_flags;
+	xassert(debug_level_menu_widget);
 
-	for (i = 0; i < debug_action_entries; i++)  {
-		debug_action = gtk_action_group_get_action(
-			menu_action_group, debug_actions[i].name);
-		toggle_action = GTK_TOGGLE_ACTION(debug_action);
-		orig_state = gtk_toggle_action_get_active(toggle_action);
-		if (debug_str2flags((char *)debug_actions[i].name, &tmp_flags)
-		    != SLURM_SUCCESS) {
-			g_error("debug_str2flags no good: %s\n",
-				debug_actions[i].name);
-			continue;
-		}
-		new_state = debug_flags & tmp_flags;
-		if (orig_state != new_state)
-			gtk_toggle_action_set_active(toggle_action, new_state);
-	}
+	/*
+	 * When calling _set_debug_list we will call this again, so if we are
+	 * already running we need to just bail.
+	 */
+	if (running)
+		return;
+	running = 1;
+	list_for_each(debug_level_menu_widget->sub, _set_debug_list,
+		      &debug_level);
+	running = 0;
 }
 
-static void _set_debug(GtkRadioAction *action,
-		       GtkRadioAction *extra,
-		       GtkNotebook *notebook)
+static void _get_current_debug(GtkWidget *widget, gpointer user_data)
 {
-	char *temp = NULL;
-	int level;
-	/* This is here to make sure we got the correct value in the
-	   beginning.  This gets called when the value is
-	   changed. And since we don't set it at the beginning we
-	   need to check it here. */
-	if (!debug_inited) {
-		debug_inited = 1;
+	static int debug_level = -1;
+	int err_code = get_new_info_config(&slurm_ctl_conf_ptr);
+
+	if (err_code == SLURM_ERROR) {
+		char *temp = g_strdup_printf("Problem getting config info from slurmctld.");
+		display_edit_note(temp);
+		g_free(temp);
 		return;
 	}
 
-	level = gtk_radio_action_get_current_value(action);
-	if (!slurm_set_debug_level(level)) {
+	/* No change */
+	if (debug_level == slurm_ctl_conf_ptr->slurmctld_debug)
+		return;
+
+	debug_level = slurm_ctl_conf_ptr->slurmctld_debug;
+
+	_set_debug_gtk(debug_level);
+
+	/* Let gtk know we can now start handling things that change. */
+	debug_inited = 1;
+}
+
+/* static void _get_current_debug_flags(GtkToggleAction *action) */
+/* { */
+/* 	static uint64_t debug_flags = 0, tmp_flags; */
+/* 	int err_code = get_new_info_config(&slurm_ctl_conf_ptr); */
+/* 	GtkAction *debug_action = NULL; */
+/* 	GtkToggleAction *toggle_action; */
+/* 	gboolean orig_state, new_state; */
+/* 	int i; */
+
+/* 	if (err_code != SLURM_ERROR) */
+/* 		debug_flags = slurm_ctl_conf_ptr->debug_flags; */
+
+/* 	for (i = 0; i < debug_action_entries; i++)  { */
+/* 		debug_action = gtk_action_group_get_action( */
+/* 			menu_action_group, debug_actions[i].name); */
+/* 		toggle_action = GTK_TOGGLE_ACTION(debug_action); */
+/* 		orig_state = gtk_toggle_action_get_active(toggle_action); */
+/* 		if (debug_str2flags((char *)debug_actions[i].name, &tmp_flags) */
+/* 		    != SLURM_SUCCESS) { */
+/* 			g_error("debug_str2flags no good: %s\n", */
+/* 				debug_actions[i].name); */
+/* 			continue; */
+/* 		} */
+/* 		new_state = debug_flags & tmp_flags; */
+/* 		if (orig_state != new_state) */
+/* 			gtk_toggle_action_set_active(toggle_action, new_state); */
+/* 	} */
+/* } */
+
+static void _set_debug(GtkWidget *widget, gpointer user_data)
+{
+	menu_item_t *menu_item = (menu_item_t *)user_data;
+	char *temp = NULL;
+
+	if (!gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(widget)))
+		return;
+
+	/*
+	 * This is here to make sure we got the correct value in the
+	 * beginning.  This gets called when the value is
+	 * changed.  And since we don't set it at the beginning we
+	 * need to check it here.
+	 */
+	if (!debug_inited)
+		return;
+
+	/* No change */
+	if (menu_item->value == slurm_ctl_conf_ptr->slurmctld_debug)
 		temp = g_strdup_printf(
-			"Slurmctld debug level is now set to %d", level);
+			"Slurmctld already at debug level '%s', no change",
+			menu_item->name);
+	else if (!slurm_set_debug_level(menu_item->value)) {
+		temp = g_strdup_printf(
+			"Slurmctld debug level is now set to '%s'",
+			menu_item->name);
+		_set_debug_gtk(menu_item->value);
 	} else
 		temp = g_strdup_printf("Problem with set debug level request");
 	display_edit_note(temp);
 	g_free(temp);
 }
 
-static void _set_flags(GtkToggleAction *action)
-{
-	char *temp = NULL;
-	uint64_t debug_flags_plus = 0, debug_flags_minus = 0;
-	uint64_t flag = (uint64_t)NO_VAL;
-	const char *name;
+/* static void _set_flags(GtkToggleAction *action) */
+/* { */
+/* 	char *temp = NULL; */
+/* 	uint64_t debug_flags_plus = 0, debug_flags_minus = 0; */
+/* 	uint64_t flag = (uint64_t)NO_VAL; */
+/* 	const char *name; */
 
-	if (!action)
-		return;
+/* 	if (!action) */
+/* 		return; */
 
-	name = gtk_action_get_name(GTK_ACTION(action));
-	if (!name)
-		return;
+/* 	name = gtk_action_get_name(GTK_ACTION(action)); */
+/* 	if (!name) */
+/* 		return; */
 
-	if (debug_str2flags((char *)name, &flag) != SLURM_SUCCESS)
-		return;
+/* 	if (debug_str2flags((char *)name, &flag) != SLURM_SUCCESS) */
+/* 		return; */
 
-	if (action && gtk_toggle_action_get_active(action))
-		debug_flags_plus  |= flag;
-	else
-		debug_flags_minus |= flag;
+/* 	if (action && gtk_toggle_action_get_active(action)) */
+/* 		debug_flags_plus  |= flag; */
+/* 	else */
+/* 		debug_flags_minus |= flag; */
 
-	if (!slurm_set_debugflags(debug_flags_plus, debug_flags_minus))
-		temp = g_strdup_printf("Slurmctld DebugFlags reset");
-	else
-		temp = g_strdup_printf("Problem with set DebugFlags request");
-	display_edit_note(temp);
-	g_free(temp);
-}
+/* 	if (!slurm_set_debugflags(debug_flags_plus, debug_flags_minus)) */
+/* 		temp = g_strdup_printf("Slurmctld DebugFlags reset"); */
+/* 	else */
+/* 		temp = g_strdup_printf("Problem with set DebugFlags request"); */
+/* 	display_edit_note(temp); */
+/* 	g_free(temp); */
+/* } */
 
-static void _tab_pos(GtkRadioAction *action,
-		     GtkRadioAction *extra,
-		     GtkNotebook *notebook)
-{
-	working_sview_config.tab_pos =
-		gtk_radio_action_get_current_value(action);
-	gtk_notebook_set_tab_pos(notebook, working_sview_config.tab_pos);
-}
+/* static void _tab_pos(GtkRadioAction *action, */
+/* 		     GtkRadioAction *extra, */
+/* 		     GtkNotebook *notebook) */
+/* { */
+/* 	working_sview_config.tab_pos = */
+/* 		gtk_radio_action_get_current_value(action); */
+/* 	gtk_notebook_set_tab_pos(notebook, working_sview_config.tab_pos); */
+/* } */
 
 static void _init_pages(void)
 {
@@ -639,102 +666,6 @@ static gboolean _delete(GtkWidget *widget,
 	return false;
 }
 
-static char *_get_ui_description()
-{
-	/* Our menu*/
-	char *ui_description = NULL;
-	int i;
-
-	xstrcat(ui_description,
-		"<ui>"
-		"  <menubar name='main'>"
-		"    <menu action='actions'>"
-		"      <menu action='create'>"
-		"        <menuitem action='batch_job'/>"
-		"        <menuitem action='partition'/>"
-		"        <menuitem action='reservation'/>"
-		"      </menu>"
-		"      <menu action='search'>"
-		"        <menuitem action='jobid'/>"
-		"        <menuitem action='user_jobs'/>"
-		"        <menuitem action='state_jobs'/>");
-	xstrcat(ui_description,
-		"      <separator/>"
-		"        <menuitem action='partition_name'/>"
-		"        <menuitem action='partition_state'/>"
-		"      <separator/>");
-	xstrcat(ui_description,
-		"        <menuitem action='node_name'/>"
-		"        <menuitem action='node_state'/>");
-	xstrcat(ui_description,
-		"      <separator/>"
-		"        <menuitem action='reservation_name'/>"
-		"      </menu>"
-		"      <menuitem action='refresh'/>"
-		"      <menuitem action='reconfig'/>"
-		"      <menu action='debuglevel'>"
-		"        <menuitem action='debug_quiet'/>"
-		"        <menuitem action='debug_fatal'/>"
-		"        <menuitem action='debug_error'/>"
-		"        <menuitem action='debug_info'/>"
-		"        <menuitem action='debug_verbose'/>"
-		"        <menuitem action='debug_debug'/>"
-		"        <menuitem action='debug_debug2'/>"
-		"        <menuitem action='debug_debug3'/>"
-		"        <menuitem action='debug_debug4'/>"
-		"        <menuitem action='debug_debug5'/>"
-		"      </menu>"
-		"      <menu action='debugflags'>");
-	for (i = 0; i < debug_action_entries; i++)  {
-		xstrfmtcat(ui_description,
-			   "        <menuitem action='%s'/>",
-			   debug_actions[i].name);
-	}
-	xstrcat(ui_description,
-			"      </menu>"
-		"      <separator/>"
-		"      <menuitem action='exit'/>"
-		"    </menu>"
-		"    <menu action='options'>"
-		"      <menuitem action='grid'/>"
-		"      <menuitem action='hidden'/>"
-		"      <menuitem action='page_opts'/>"
-#ifdef WANT_TOPO_ON_MAIN_OPTIONS
-		"      <menuitem action='topoorder'/>"
-#endif
-		"      <menuitem action='ruled'/>");
-	if (cluster_dims == 1)
-		xstrcat(ui_description,
-			"      <menuitem action='grid_specs'/>");
-
-	xstrcat(ui_description,
-		"      <menuitem action='interval'/>"
-		"      <separator/>"
-		"      <menuitem action='admin'/>"
-		"      <separator/>"
-		"      <menu action='tab_pos'>"
-		"        <menuitem action='tab_top'/>"
-		"        <menuitem action='tab_bottom'/>"
-		"        <menuitem action='tab_left'/>"
-		"        <menuitem action='tab_right'/>"
-		"      </menu>"
-		"      <separator/>"
-		"      <menuitem action='defaults'/>"
-		"    </menu>"
-		"    <menu action='displays'>"
-		"      <menuitem action='config'/>"
-		"      <menuitem action='dbconfig'/>"
-		"    </menu>"
-		"    <menu action='help'>"
-		"      <menuitem action='about'/>"
-		"      <menuitem action='usage'/>"
-		/* "      <menuitem action='manual'/>" */
-		"    </menu>"
-		"  </menubar>"
-		"</ui>");
-	return ui_description;
-}
-
 static bool _user_is_admin(void)
 {
 	uid_t uid = getuid();
@@ -753,279 +684,500 @@ static bool _user_is_admin(void)
 	return (level >= SLURMDB_ADMIN_SUPER_USER);
 }
 
+
+static List _get_menu_item_list(void)
+{
+	/* Our menu */
+	List menu_list = list_create(NULL);
+	menu_item_t *menu_desc, *sub_desc, *sub2_desc;
+	bool gray_out_admin = !_user_is_admin();
+
+	/* Menu Item Action */
+	menu_desc = xmalloc(sizeof(menu_item_t));
+	list_append(menu_list, menu_desc);
+	menu_desc->name = xstrdup("_Actions");
+
+	menu_desc->sub = list_create(NULL);
+
+	/* Action -> Create */
+	sub_desc = xmalloc(sizeof(menu_item_t));
+	list_append(menu_desc->sub, sub_desc);
+	sub_desc->name = xstrdup("Create");
+
+	sub_desc->sub = list_create(NULL);
+
+	/* Create -> */
+	sub2_desc = xmalloc(sizeof(menu_item_t));
+	list_append(sub_desc->sub, sub2_desc);
+	sub2_desc->name = xstrdup("Batch Job");
+	sub2_desc->cb_activate = create_create_popup;
+
+	sub2_desc = xmalloc(sizeof(menu_item_t));
+	list_append(sub_desc->sub, sub2_desc);
+	sub2_desc->name = xstrdup("Partition");
+	sub2_desc->cb_activate = create_create_popup;
+
+	sub2_desc = xmalloc(sizeof(menu_item_t));
+	list_append(sub_desc->sub, sub2_desc);
+	sub2_desc->name = xstrdup("Reservation");
+	sub2_desc->cb_activate = create_create_popup;
+
+	/* Action -> Search */
+	sub_desc = xmalloc(sizeof(menu_item_t));
+	list_append(menu_desc->sub, sub_desc);
+	sub_desc->name = xstrdup("_Search");
+
+	sub_desc->sub = list_create(NULL);
+
+	/* Search -> */
+	sub2_desc = xmalloc(sizeof(menu_item_t));
+	list_append(sub_desc->sub, sub2_desc);
+	sub2_desc->name = xstrdup("Job ID2");
+	sub2_desc->cb_activate = create_search_popup;
+
+	sub2_desc = xmalloc(sizeof(menu_item_t));
+	list_append(sub_desc->sub, sub2_desc);
+	sub2_desc->name = xstrdup("Specific Users Job(s)");
+	sub2_desc->cb_activate = create_search_popup;
+
+	sub2_desc = xmalloc(sizeof(menu_item_t));
+	list_append(sub_desc->sub, sub2_desc);
+	sub2_desc->name = xstrdup("Job(s) in a Specific State");
+	sub2_desc->cb_activate = create_search_popup;
+
+	sub2_desc = xmalloc(sizeof(menu_item_t));
+	list_append(sub_desc->sub, sub2_desc);
+	sub2_desc->name = xstrdup("Slurm Partition Name");
+	sub2_desc->cb_activate = create_search_popup;
+
+	sub2_desc = xmalloc(sizeof(menu_item_t));
+	list_append(sub_desc->sub, sub2_desc);
+	sub2_desc->name = xstrdup("Slurm Partition State");
+	sub2_desc->cb_activate = create_search_popup;
+
+	sub2_desc = xmalloc(sizeof(menu_item_t));
+	list_append(sub_desc->sub, sub2_desc);
+	sub2_desc->name = xstrdup("Reservation Name");
+	sub2_desc->cb_activate = create_search_popup;
+
+	/* Action -> Refresh */
+	sub_desc = xmalloc(sizeof(menu_item_t));
+	list_append(menu_desc->sub, sub_desc);
+	sub_desc->name = xstrdup("Refresh");
+	sub_desc->cb_activate = refresh_main;
+
+	/* Action -> Reconfigure */
+	sub_desc = xmalloc(sizeof(menu_item_t));
+	list_append(menu_desc->sub, sub_desc);
+	sub_desc->name = xstrdup("Slur_m Reconfigure");
+	sub_desc->cb_activate = _reconfigure;
+	if (gray_out_admin)
+		sub_desc->flags |= MENU_ITEM_GRAY_OUT;
+
+	/* Action -> Debug Flags */
+	sub_desc = xmalloc(sizeof(menu_item_t));
+	list_append(menu_desc->sub, sub_desc);
+	sub_desc->name = xstrdup("Slurmctld DebugFlags");
+	if (gray_out_admin)
+		sub_desc->flags |= MENU_ITEM_GRAY_OUT;
+
+	/* Action -> Debug Level */
+	debug_level_menu_widget = sub_desc = xmalloc(sizeof(menu_item_t));
+	list_append(menu_desc->sub, sub_desc);
+	sub_desc->name = xstrdup("Slurmctld Debug Level");
+	sub_desc->cb_select = _get_current_debug;
+//	sub2_desc->cb_activate = _set_debug;
+	sub_desc->flags |= MENU_ITEM_RADIO;
+	if (gray_out_admin)
+		sub_desc->flags |= MENU_ITEM_GRAY_OUT;
+
+	sub_desc->group = &debug_level_menu_group;
+
+	sub_desc->sub = list_create(NULL);
+
+	/* Debug Level radio */
+	for (int i = LOG_LEVEL_QUIET; i < LOG_LEVEL_END; i++) {
+		sub2_desc = xmalloc(sizeof(menu_item_t));
+		list_append(sub_desc->sub, sub2_desc);
+		sub2_desc->name = xstrdup(log_num2string(i));
+		sub2_desc->group = &debug_level_menu_group;
+		sub2_desc->cb_activate = _set_debug;
+		sub2_desc->value = i;
+	}
+
+	/* Action -> Exit */
+	sub_desc = xmalloc(sizeof(menu_item_t));
+	list_append(menu_desc->sub, sub_desc);
+	sub_desc->name = xstrdup("_Exit");
+
+	/* Options */
+	menu_desc = xmalloc(sizeof(menu_item_t));
+	list_append(menu_list, menu_desc);
+	menu_desc->name = xstrdup("_Options");
+
+	sub_desc->sub = list_create(NULL);
+
+	/* Query */
+	menu_desc = xmalloc(sizeof(menu_item_t));
+	list_append(menu_list, menu_desc);
+	menu_desc->name = xstrdup("_Query");
+
+	/* Help */
+	menu_desc = xmalloc(sizeof(menu_item_t));
+	list_append(menu_list, menu_desc);
+	menu_desc->name = xstrdup("_Help");
+
+	return menu_list;
+}
+
+static int _make_radio(void *x, void *arg)
+{
+	menu_item_t *menu_item = (menu_item_t *)x;
+	GtkWidget *menu_bar = (GtkWidget *)arg;
+
+	if (xstrchr(menu_item->name, '_'))
+		menu_item->widget =
+			gtk_radio_menu_item_new_with_mnemonic(
+				*menu_item->group, menu_item->name);
+	else
+		menu_item->widget =
+			gtk_radio_menu_item_new_with_label(
+				*menu_item->group, menu_item->name);
+	*menu_item->group = gtk_radio_menu_item_get_group(
+		GTK_RADIO_MENU_ITEM(menu_item->widget));
+
+	if (menu_item->cb_activate) {
+		g_signal_connect(menu_item->widget, "activate",
+				 G_CALLBACK(menu_item->cb_activate), menu_item);
+	}
+
+	gtk_menu_shell_append(GTK_MENU_SHELL(menu_bar), menu_item->widget);
+
+	return SLURM_SUCCESS;
+}
+
+static int _make_menu(void *x, void *arg)
+{
+	menu_item_t *menu_item = (menu_item_t *)x;
+	GtkWidget *menu_bar = (GtkWidget *)arg;
+
+	if (xstrchr(menu_item->name, '_'))
+		menu_item->widget =
+			gtk_menu_item_new_with_mnemonic(menu_item->name);
+	else
+		menu_item->widget =
+			gtk_menu_item_new_with_label(menu_item->name);
+
+	gtk_widget_set_sensitive(menu_item->widget,
+				 !(menu_item->flags & MENU_ITEM_GRAY_OUT));
+
+	if (menu_item->cb_activate)
+		g_signal_connect(menu_item->widget, "activate",
+				 G_CALLBACK(menu_item->cb_activate), menu_item);
+	if (menu_item->cb_select)
+		g_signal_connect(menu_item->widget, "select",
+				 G_CALLBACK(menu_item->cb_select), menu_item);
+
+	if (menu_item->sub && list_count(menu_item->sub)) {
+		GtkWidget *sub_menu = gtk_menu_new();
+		if (menu_item->flags & MENU_ITEM_RADIO) {
+			list_for_each(menu_item->sub, _make_radio,
+				      sub_menu);
+		} else
+			list_for_each(menu_item->sub, _make_menu, sub_menu);
+		gtk_menu_item_set_submenu(
+			GTK_MENU_ITEM(menu_item->widget), sub_menu);
+	}
+
+	gtk_menu_shell_append(GTK_MENU_SHELL(menu_bar), menu_item->widget);
+
+	return SLURM_SUCCESS;
+}
+
 /* Returns a menubar widget made from the above menu */
 static GtkWidget *_get_menubar_menu(GtkWidget *window, GtkWidget *notebook)
 {
-	GtkAccelGroup *accel_group = NULL;
-	GError *error = NULL;
-	char *ui_description;
+	List menu_list = _get_menu_item_list();
+	GtkWidget *center_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+	GtkWidget *menu_bar = gtk_menu_bar_new();
 
-	GtkActionEntry entries[] = {
-		{"actions", NULL, "_Actions", "<alt>a"},
-		{"options", NULL, "_Options", "<alt>o"},
-		{"displays", NULL, "_Query", "<alt>q"},
-		{"batch_job", NULL, "Batch Job", "", "Submit batch job",
-		 G_CALLBACK(create_create_popup)},
-		{"partition", NULL, "Partition", "", "Create partition",
-		 G_CALLBACK(create_create_popup)},
-		{"reservation", NULL, "Reservation", "", "Create reservation",
-		 G_CALLBACK(create_create_popup)},
-		{"search", GTK_STOCK_FIND, "Search", ""},
-		{"jobid", NULL, "Job ID",
-		 "", "Search for jobid",
-		 G_CALLBACK(create_search_popup)},
-		{"user_jobs", NULL, "Specific User's Job(s)",
-		 "", "Search for a specific users job(s)",
-		 G_CALLBACK(create_search_popup)},
-		{"state_jobs", NULL, "Job(s) in a Specific State",
-		 "", "Search for job(s) in a specific state",
-		 G_CALLBACK(create_search_popup)},
-		{"partition_name", NULL, "Slurm Partition Name",
-		 "", "Search for a specific Slurm partition",
-		 G_CALLBACK(create_search_popup)},
-		{"partition_state", NULL, "Slurm Partition State",
-		 "", "Search for Slurm partitions in a given state",
-		 G_CALLBACK(create_search_popup)},
-		{"reservation_name", NULL, "Reservation Name",
-		 "", "Search for reservation",
-		 G_CALLBACK(create_search_popup)},
-		{"tab_pos", NULL, "_Tab Position"},
-		{"create", GTK_STOCK_ADD, "Create"},
-		{"interval", GTK_STOCK_REFRESH, "Set Refresh _Interval",
-		 "<control>i", "Change Refresh Interval",
-		 G_CALLBACK(change_refresh_popup)},
-		{"refresh", GTK_STOCK_REFRESH, "Refresh",
-		 "F5", "Refreshes page", G_CALLBACK(refresh_main)},
-		{"config", GTK_STOCK_INFO, "_Config Info",
-		 "<control>c", "Displays info from slurm.conf file",
-		 G_CALLBACK(create_config_popup)},
-		{"dbconfig", GTK_STOCK_INFO, "_Database Config Info",
-		 "<control>d",
-		 "Displays info relevant to the "
-		 "configuration of the Slurm Database.",
-		 G_CALLBACK(create_dbconfig_popup)},
-		{"exit", GTK_STOCK_QUIT, "E_xit",
-		 "<control>x", "Exits Program", G_CALLBACK(_delete)},
-		{"help", NULL, "_Help", "<alt>h"},
-		{"about", GTK_STOCK_ABOUT, "Ab_out", "<control>o",
-		 "About", G_CALLBACK(about_popup)},
-		{"usage", GTK_STOCK_HELP, "Usage", "",
-		 "Usage", G_CALLBACK(usage_popup)},
-		//{"manual", GTK_STOCK_HELP, "_Manual", "<control>m"},
-		{"grid_specs", GTK_STOCK_EDIT, "Set Grid _Properties",
-		 "<control>p", "Change Grid Properties",
-		 G_CALLBACK(change_grid_popup)},
-		{"defaults", GTK_STOCK_EDIT, "_Set Default Settings",
-		 "<control>s", "Change Default Settings",
-		 G_CALLBACK(configure_defaults)},
-	};
+	/* Process the list */
+	list_for_each(menu_list, _make_menu, menu_bar);
 
-	GtkActionEntry node_entries[] = {
-		{"node_name", NULL,
-		 "Node(s) Name",
-		 "", "Search for a specific Node(s)",
-		 G_CALLBACK(create_search_popup)},
-		{"node_state", NULL,
-		 "Node State",
-		 "", "Search for a Node in a given state",
-		 G_CALLBACK(create_search_popup)},
-	};
+	gtk_box_pack_start (GTK_BOX(center_vbox), menu_bar, false, false, 0);
 
-	GtkActionEntry admin_entries[] = {
-		{"reconfig", GTK_STOCK_REDO, "SLUR_M Reconfigure",
-		 "<control>m", "Reconfigures System",
-		 G_CALLBACK(_reconfigure)},
-		{"debugflags", GTK_STOCK_DIALOG_WARNING,
-		 "Slurmctld DebugFlags",
-		 "", "Set slurmctld DebugFlags",
-		 G_CALLBACK(_get_current_debug_flags)},
-		{"debuglevel", GTK_STOCK_DIALOG_WARNING,
-		 "Slurmctld Debug Level",
-		 "", "Set slurmctld debug level",
-		 G_CALLBACK(_get_current_debug)},
-	};
+	return center_vbox;
 
-	GtkRadioActionEntry radio_entries[] = {
-		{"tab_top", GTK_STOCK_GOTO_TOP, "_Top",
-		 "<control>T", "Move tabs to top", GTK_POS_TOP},
-		{"tab_bottom", GTK_STOCK_GOTO_BOTTOM, "_Bottom",
-		 "<control>B", "Move tabs to the bottom", GTK_POS_BOTTOM},
-		{"tab_left", GTK_STOCK_GOTO_FIRST, "_Left",
-		 "<control>L", "Move tabs to the Left", GTK_POS_LEFT},
-		{"tab_right", GTK_STOCK_GOTO_LAST, "_Right",
-		 "<control>R", "Move tabs to the Right", GTK_POS_RIGHT}
-	};
+/* 	GtkAccelGroup *accel_group = NULL; */
+/* 	GError *error = NULL; */
+/* 	char *ui_description; */
 
-	GtkToggleActionEntry toggle_entries[] = {
-		{"grid", GTK_STOCK_SELECT_COLOR, "Show _Grid",
-		 "<control>g", "Visual display of cluster",
-		 G_CALLBACK(_set_grid), working_sview_config.show_grid},
-		{"hidden", GTK_STOCK_SELECT_COLOR, "Show _Hidden",
-		 "<control>h", "Display Hidden Partitions/Jobs",
-		 G_CALLBACK(_set_hidden), working_sview_config.show_hidden},
-		{"page_opts", GTK_STOCK_SELECT_COLOR, "Save Page Options",
-		 "<control>w", "Save Page Options",
-		 G_CALLBACK(_set_page_opts),
-		 working_sview_config.save_page_opts},
-#ifdef WANT_TOPO_ON_MAIN_OPTIONS
-		{"topoorder", GTK_STOCK_SELECT_COLOR, "Set Topology Grid",
-		 "<control>t", "Set Topology Grid",
-		 G_CALLBACK(_set_topogrid),
-		 working_sview_config.grid_topological},
-#endif
-		{"ruled", GTK_STOCK_SELECT_COLOR, "R_uled Tables",
-		 "<control>u", "Have ruled tables or not",
-		 G_CALLBACK(_set_ruled), working_sview_config.ruled_treeview},
-		{"admin", GTK_STOCK_PREFERENCES,
-		 "_Admin Mode", "<control>a",
-		 "Allows user to change or update information",
-		 G_CALLBACK(_set_admin_mode),
-		 working_sview_config.admin_mode}
-	};
+/* 	GtkActionEntry entries[] = { */
+/* 		{"actions", NULL, "_Actions", "<alt>a"}, */
+/* 		{"options", NULL, "_Options", "<alt>o"}, */
+/* 		{"displays", NULL, "_Query", "<alt>q"}, */
+/* 		{"batch_job", NULL, "Batch Job", "", "Submit batch job", */
+/* 		 G_CALLBACK(create_create_popup)}, */
+/* 		{"partition", NULL, "Partition", "", "Create partition", */
+/* 		 G_CALLBACK(create_create_popup)}, */
+/* 		{"reservation", NULL, "Reservation", "", "Create reservation", */
+/* 		 G_CALLBACK(create_create_popup)}, */
+/* 		{"search", GTK_STOCK_FIND, "Search", ""}, */
+/* 		{"jobid", NULL, "Job ID", */
+/* 		 "", "Search for jobid", */
+/* 		 G_CALLBACK(create_search_popup)}, */
+/* 		{"user_jobs", NULL, "Specific User's Job(s)", */
+/* 		 "", "Search for a specific users job(s)", */
+/* 		 G_CALLBACK(create_search_popup)}, */
+/* 		{"state_jobs", NULL, "Job(s) in a Specific State", */
+/* 		 "", "Search for job(s) in a specific state", */
+/* 		 G_CALLBACK(create_search_popup)}, */
+/* 		{"partition_name", NULL, "Slurm Partition Name", */
+/* 		 "", "Search for a specific Slurm partition", */
+/* 		 G_CALLBACK(create_search_popup)}, */
+/* 		{"partition_state", NULL, "Slurm Partition State", */
+/* 		 "", "Search for Slurm partitions in a given state", */
+/* 		 G_CALLBACK(create_search_popup)}, */
+/* 		{"reservation_name", NULL, "Reservation Name", */
+/* 		 "", "Search for reservation", */
+/* 		 G_CALLBACK(create_search_popup)}, */
+/* 		{"tab_pos", NULL, "_Tab Position"}, */
+/* 		{"create", GTK_STOCK_ADD, "Create"}, */
+/* 		{"interval", GTK_STOCK_REFRESH, "Set Refresh _Interval", */
+/* 		 "<control>i", "Change Refresh Interval", */
+/* 		 G_CALLBACK(change_refresh_popup)}, */
+/* 		{"refresh", GTK_STOCK_REFRESH, "Refresh", */
+/* 		 "F5", "Refreshes page", G_CALLBACK(refresh_main)}, */
+/* 		{"config", GTK_STOCK_INFO, "_Config Info", */
+/* 		 "<control>c", "Displays info from slurm.conf file", */
+/* 		 G_CALLBACK(create_config_popup)}, */
+/* 		{"dbconfig", GTK_STOCK_INFO, "_Database Config Info", */
+/* 		 "<control>d", */
+/* 		 "Displays info relevant to the " */
+/* 		 "configuration of the Slurm Database.", */
+/* 		 G_CALLBACK(create_dbconfig_popup)}, */
+/* 		{"exit", GTK_STOCK_QUIT, "E_xit", */
+/* 		 "<control>x", "Exits Program", G_CALLBACK(_delete)}, */
+/* 		{"help", NULL, "_Help", "<alt>h"}, */
+/* 		{"about", GTK_STOCK_ABOUT, "Ab_out", "<control>o", */
+/* 		 "About", G_CALLBACK(about_popup)}, */
+/* 		{"usage", GTK_STOCK_HELP, "Usage", "", */
+/* 		 "Usage", G_CALLBACK(usage_popup)}, */
+/* 		//{"manual", GTK_STOCK_HELP, "_Manual", "<control>m"}, */
+/* 		{"grid_specs", GTK_STOCK_EDIT, "Set Grid _Properties", */
+/* 		 "<control>p", "Change Grid Properties", */
+/* 		 G_CALLBACK(change_grid_popup)}, */
+/* 		{"defaults", GTK_STOCK_EDIT, "_Set Default Settings", */
+/* 		 "<control>s", "Change Default Settings", */
+/* 		 G_CALLBACK(configure_defaults)}, */
+/* 	}; */
 
-	GtkRadioActionEntry debug_entries[] = {
-		{"debug_quiet", NULL, "quiet(0)", "", "Quiet level", 0},
-		{"debug_fatal", NULL, "fatal(1)", "", "Fatal level", 1},
-		{"debug_error", NULL, "error(2)", "", "Error level", 2},
-		{"debug_info", NULL, "info(3)", "", "Info level", 3},
-		{"debug_verbose", NULL, "verbose(4)", "", "Verbose level", 4},
-		{"debug_debug", NULL, "debug(5)", "", "Debug debug level", 5},
-		{"debug_debug2", NULL, "debug2(6)", "", "Debug2 level", 6},
-		{"debug_debug3", NULL, "debug3(7)", "", "Debug3 level", 7},
-		{"debug_debug4", NULL, "debug4(8)", "", "Debug4 level", 8},
-		{"debug_debug5", NULL, "debug5(9)", "", "Debug5 level", 9},
-	};
+/* 	GtkActionEntry node_entries[] = { */
+/* 		{"node_name", NULL, */
+/* 		 "Node(s) Name", */
+/* 		 "", "Search for a specific Node(s)", */
+/* 		 G_CALLBACK(create_search_popup)}, */
+/* 		{"node_state", NULL, */
+/* 		 "Node State", */
+/* 		 "", "Search for a Node in a given state", */
+/* 		 G_CALLBACK(create_search_popup)}, */
+/* 	}; */
 
-	char *all_debug_flags = debug_flags2str(0xFFFFFFFFFFFFFFFF);
-	char *last = NULL;
-	char *tok = strtok_r(all_debug_flags, ",", &last);
+/* 	GtkActionEntry admin_entries[] = { */
+/* 		{"reconfig", GTK_STOCK_REDO, "SLUR_M Reconfigure", */
+/* 		 "<control>m", "Reconfigures System", */
+/* 		 G_CALLBACK(_reconfigure)}, */
+/* 		{"debugflags", GTK_STOCK_DIALOG_WARNING, */
+/* 		 "Slurmctld DebugFlags", */
+/* 		 "", "Set slurmctld DebugFlags", */
+/* 		 G_CALLBACK(_get_current_debug_flags)}, */
+/* 		{"debuglevel", GTK_STOCK_DIALOG_WARNING, */
+/* 		 "Slurmctld Debug Level", */
+/* 		 "", "Set slurmctld debug level", */
+/* 		 G_CALLBACK(_get_current_debug)}, */
+/* 	}; */
 
-	/* set up the global debug_actions */
-	debug_actions = xmalloc(sizeof(GtkToggleActionEntry));
+/* 	GtkRadioActionEntry radio_entries[] = { */
+/* 		{"tab_top", GTK_STOCK_GOTO_TOP, "_Top", */
+/* 		 "<control>T", "Move tabs to top", GTK_POS_TOP}, */
+/* 		{"tab_bottom", GTK_STOCK_GOTO_BOTTOM, "_Bottom", */
+/* 		 "<control>B", "Move tabs to the bottom", GTK_POS_BOTTOM}, */
+/* 		{"tab_left", GTK_STOCK_GOTO_FIRST, "_Left", */
+/* 		 "<control>L", "Move tabs to the Left", GTK_POS_LEFT}, */
+/* 		{"tab_right", GTK_STOCK_GOTO_LAST, "_Right", */
+/* 		 "<control>R", "Move tabs to the Right", GTK_POS_RIGHT} */
+/* 	}; */
 
-	while (tok) {
-		xrealloc(debug_actions,
-			 (debug_action_entries + 1)
-			 * sizeof(GtkToggleActionEntry));
-		debug_actions[debug_action_entries].name =
-			debug_actions[debug_action_entries].label =
-			debug_actions[debug_action_entries].tooltip =
-			xstrdup(tok);
-		debug_actions[debug_action_entries].callback =
-			G_CALLBACK(_set_flags);
-		debug_action_entries++;
-		tok = strtok_r(NULL, ",", &last);
-	}
-	xfree(all_debug_flags);
+/* 	GtkToggleActionEntry toggle_entries[] = { */
+/* 		{"grid", GTK_STOCK_SELECT_COLOR, "Show _Grid", */
+/* 		 "<control>g", "Visual display of cluster", */
+/* 		 G_CALLBACK(_set_grid), working_sview_config.show_grid}, */
+/* 		{"hidden", GTK_STOCK_SELECT_COLOR, "Show _Hidden", */
+/* 		 "<control>h", "Display Hidden Partitions/Jobs", */
+/* 		 G_CALLBACK(_set_hidden), working_sview_config.show_hidden}, */
+/* 		{"page_opts", GTK_STOCK_SELECT_COLOR, "Save Page Options", */
+/* 		 "<control>w", "Save Page Options", */
+/* 		 G_CALLBACK(_set_page_opts), */
+/* 		 working_sview_config.save_page_opts}, */
+/* #ifdef WANT_TOPO_ON_MAIN_OPTIONS */
+/* 		{"topoorder", GTK_STOCK_SELECT_COLOR, "Set Topology Grid", */
+/* 		 "<control>t", "Set Topology Grid", */
+/* 		 G_CALLBACK(_set_topogrid), */
+/* 		 working_sview_config.grid_topological}, */
+/* #endif */
+/* 		{"ruled", GTK_STOCK_SELECT_COLOR, "R_uled Tables", */
+/* 		 "<control>u", "Have ruled tables or not", */
+/* 		 G_CALLBACK(_set_ruled), working_sview_config.ruled_treeview}, */
+/* 		{"admin", GTK_STOCK_PREFERENCES, */
+/* 		 "_Admin Mode", "<control>a", */
+/* 		 "Allows user to change or update information", */
+/* 		 G_CALLBACK(_set_admin_mode), */
+/* 		 working_sview_config.admin_mode} */
+/* 	}; */
 
-	/* Make an accelerator group (shortcut keys) */
-	menu_action_group = gtk_action_group_new ("MenuActions");
-	gtk_action_group_add_actions(menu_action_group, entries,
-				     G_N_ELEMENTS(entries), window);
+/* 	GtkRadioActionEntry debug_entries[] = { */
+/* 		{"debug_quiet", NULL, "quiet(0)", "", "Quiet level", 0}, */
+/* 		{"debug_fatal", NULL, "fatal(1)", "", "Fatal level", 1}, */
+/* 		{"debug_error", NULL, "error(2)", "", "Error level", 2}, */
+/* 		{"debug_info", NULL, "info(3)", "", "Info level", 3}, */
+/* 		{"debug_verbose", NULL, "verbose(4)", "", "Verbose level", 4}, */
+/* 		{"debug_debug", NULL, "debug(5)", "", "Debug debug level", 5}, */
+/* 		{"debug_debug2", NULL, "debug2(6)", "", "Debug2 level", 6}, */
+/* 		{"debug_debug3", NULL, "debug3(7)", "", "Debug3 level", 7}, */
+/* 		{"debug_debug4", NULL, "debug4(8)", "", "Debug4 level", 8}, */
+/* 		{"debug_debug5", NULL, "debug5(9)", "", "Debug5 level", 9}, */
+/* 	}; */
 
-	gtk_action_group_add_actions(menu_action_group, node_entries,
-				     G_N_ELEMENTS(node_entries),
-				     window);
+/* 	char *all_debug_flags = debug_flags2str(0xFFFFFFFFFFFFFFFF); */
+/* 	char *last = NULL; */
+/* 	char *tok = strtok_r(all_debug_flags, ",", &last); */
 
-	gtk_action_group_add_radio_actions(menu_action_group, radio_entries,
-					   G_N_ELEMENTS(radio_entries),
-					   working_sview_config.tab_pos,
-					   G_CALLBACK(_tab_pos), notebook);
-	gtk_action_group_add_toggle_actions(menu_action_group, debug_actions,
-					    debug_action_entries, NULL);
-	gtk_action_group_add_radio_actions(menu_action_group, debug_entries,
-					   G_N_ELEMENTS(debug_entries),
-					   -1, G_CALLBACK(_set_debug),
-					   notebook);
-	gtk_action_group_add_toggle_actions(menu_action_group, toggle_entries,
-					    G_N_ELEMENTS(toggle_entries),
-					    NULL);
-	admin_action_group = gtk_action_group_new ("MenuAdminActions");
-	gtk_action_group_add_actions(admin_action_group, admin_entries,
-				     G_N_ELEMENTS(admin_entries),
-				     window);
-	gtk_action_group_set_sensitive(admin_action_group,
-				       working_sview_config.admin_mode);
+/* 	/\* set up the global debug_actions *\/ */
+/* 	debug_actions = xmalloc(sizeof(GtkToggleActionEntry)); */
 
-	/*
-	 * If user is neither root, slurm user, nor listed as a super user
-	 * in the db, disable admin_mode.
-	 */
-	if (!_user_is_admin()) {
-		GtkAction *tmp = NULL;
-		tmp = gtk_action_group_get_action(menu_action_group, "admin");
-		gtk_action_set_sensitive(tmp, false);
-	}
+/* 	while (tok) { */
+/* 		xrealloc(debug_actions, */
+/* 			 (debug_action_entries + 1) */
+/* 			 * sizeof(GtkToggleActionEntry)); */
+/* 		debug_actions[debug_action_entries].name = */
+/* 			debug_actions[debug_action_entries].label = */
+/* 			debug_actions[debug_action_entries].tooltip = */
+/* 			xstrdup(tok); */
+/* 		debug_actions[debug_action_entries].callback = */
+/* 			G_CALLBACK(_set_flags); */
+/* 		debug_action_entries++; */
+/* 		tok = strtok_r(NULL, ",", &last); */
+/* 	} */
+/* 	xfree(all_debug_flags); */
 
-	g_ui_manager = gtk_ui_manager_new();
-	gtk_ui_manager_insert_action_group(g_ui_manager, menu_action_group, 0);
-	gtk_ui_manager_insert_action_group(g_ui_manager, admin_action_group, 1);
+/* 	/\* Make an accelerator group (shortcut keys) *\/ */
+/* 	menu_action_group = gtk_action_group_new ("MenuActions"); */
+/* 	gtk_action_group_add_actions(menu_action_group, entries, */
+/* 				     G_N_ELEMENTS(entries), window); */
 
-	accel_group = gtk_ui_manager_get_accel_group(g_ui_manager);
-	gtk_window_add_accel_group(GTK_WINDOW(window), accel_group);
-	ui_description = _get_ui_description();
-	if (!(g_menu_id = gtk_ui_manager_add_ui_from_string(
-		      g_ui_manager, ui_description, -1, &error))) {
-		xfree(ui_description);
-		g_error("building menus failed: %s", error->message);
-		g_error_free (error);
-		exit (0);
-	}
-	xfree(ui_description);
-	/* GList *action_list = */
-	/*	gtk_action_group_list_actions(menu_action_group); */
-	/* GtkAction *action = NULL; */
-	/* int i=0; */
-	/* while ((action = g_list_nth_data(action_list, i++))) { */
-	/*	g_print("got %s and %x\n", gtk_action_get_name(action), */
-	/*		action); */
-	/* } */
+/* 	gtk_action_group_add_actions(menu_action_group, node_entries, */
+/* 				     G_N_ELEMENTS(node_entries), */
+/* 				     window); */
 
-	/* Get the pointers to the correct action so if we ever need
-	   to change it we can effect the action directly so
-	   everything stays in sync.
-	*/
-	default_sview_config.action_admin =
-		(GtkToggleAction *)gtk_action_group_get_action(
-			menu_action_group, "admin");
-	default_sview_config.action_grid =
-		(GtkToggleAction *)gtk_action_group_get_action(
-			menu_action_group, "grid");
-	default_sview_config.action_hidden =
-		(GtkToggleAction *)gtk_action_group_get_action(
-			menu_action_group, "hidden");
-	default_sview_config.action_page_opts =
-		(GtkToggleAction *)gtk_action_group_get_action(
-			menu_action_group, "page_opts");
-//	default_sview_config.action_gridtopo =
-//		(GtkToggleAction *)gtk_action_group_get_action(
-//			menu_action_group, "topoorder");
-	default_sview_config.action_ruled =
-		(GtkToggleAction *)gtk_action_group_get_action(
-			menu_action_group, "ruled");
-	/* Pick the first one of the Radio, it is how GTK references
-	   the group in the future.
-	*/
-	default_sview_config.action_tab =
-		(GtkRadioAction *)gtk_action_group_get_action(
-			menu_action_group, "tab_top");
-	/* g_print("action grid is %x\n", default_sview_config.action_grid); */
-	/* Finally, return the actual menu bar created by the item factory. */
-	return gtk_ui_manager_get_widget (g_ui_manager, "/main");
+/* 	gtk_action_group_add_radio_actions(menu_action_group, radio_entries, */
+/* 					   G_N_ELEMENTS(radio_entries), */
+/* 					   working_sview_config.tab_pos, */
+/* 					   G_CALLBACK(_tab_pos), notebook); */
+/* 	gtk_action_group_add_toggle_actions(menu_action_group, debug_actions, */
+/* 					    debug_action_entries, NULL); */
+/* 	gtk_action_group_add_radio_actions(menu_action_group, debug_entries, */
+/* 					   G_N_ELEMENTS(debug_entries), */
+/* 					   -1, G_CALLBACK(_set_debug), */
+/* 					   notebook); */
+/* 	gtk_action_group_add_toggle_actions(menu_action_group, toggle_entries, */
+/* 					    G_N_ELEMENTS(toggle_entries), */
+/* 					    NULL); */
+/* 	admin_action_group = gtk_action_group_new ("MenuAdminActions"); */
+/* 	gtk_action_group_add_actions(admin_action_group, admin_entries, */
+/* 				     G_N_ELEMENTS(admin_entries), */
+/* 				     window); */
+/* 	gtk_action_group_set_sensitive(admin_action_group, */
+/* 				       working_sview_config.admin_mode); */
+
+/* 	/\* */
+/* 	 * If user is neither root, slurm user, nor listed as a super user */
+/* 	 * in the db, disable admin_mode. */
+/* 	 *\/ */
+/* 	if (!_user_is_admin()) { */
+/* 		GtkAction *tmp = NULL; */
+/* 		tmp = gtk_action_group_get_action(menu_action_group, "admin"); */
+/* 		gtk_action_set_sensitive(tmp, false); */
+/* 	} */
+
+/* 	g_ui_manager = gtk_ui_manager_new(); */
+/* 	gtk_ui_manager_insert_action_group(g_ui_manager, menu_action_group, 0); */
+/* 	gtk_ui_manager_insert_action_group(g_ui_manager, admin_action_group, 1); */
+
+/* 	accel_group = gtk_ui_manager_get_accel_group(g_ui_manager); */
+/* 	gtk_window_add_accel_group(GTK_WINDOW(window), accel_group); */
+/* 	ui_description = _get_ui_description(); */
+/* 	if (!(g_menu_id = gtk_ui_manager_add_ui_from_string( */
+/* 		      g_ui_manager, ui_description, -1, &error))) { */
+/* 		xfree(ui_description); */
+/* 		g_error("building menus failed: %s", error->message); */
+/* 		g_error_free (error); */
+/* 		exit (0); */
+/* 	} */
+/* 	xfree(ui_description); */
+/* 	/\* GList *action_list = *\/ */
+/* 	/\*	gtk_action_group_list_actions(menu_action_group); *\/ */
+/* 	/\* GtkAction *action = NULL; *\/ */
+/* 	/\* int i=0; *\/ */
+/* 	/\* while ((action = g_list_nth_data(action_list, i++))) { *\/ */
+/* 	/\*	g_print("got %s and %x\n", gtk_action_get_name(action), *\/ */
+/* 	/\*		action); *\/ */
+/* 	/\* } *\/ */
+
+/* 	/\* Get the pointers to the correct action so if we ever need */
+/* 	   to change it we can effect the action directly so */
+/* 	   everything stays in sync. */
+/* 	*\/ */
+/* 	default_sview_config.action_admin = */
+/* 		(GtkToggleAction *)gtk_action_group_get_action( */
+/* 			menu_action_group, "admin"); */
+/* 	default_sview_config.action_grid = */
+/* 		(GtkToggleAction *)gtk_action_group_get_action( */
+/* 			menu_action_group, "grid"); */
+/* 	default_sview_config.action_hidden = */
+/* 		(GtkToggleAction *)gtk_action_group_get_action( */
+/* 			menu_action_group, "hidden"); */
+/* 	default_sview_config.action_page_opts = */
+/* 		(GtkToggleAction *)gtk_action_group_get_action( */
+/* 			menu_action_group, "page_opts"); */
+/* //	default_sview_config.action_gridtopo = */
+/* //		(GtkToggleAction *)gtk_action_group_get_action( */
+/* //			menu_action_group, "topoorder"); */
+/* 	default_sview_config.action_ruled = */
+/* 		(GtkToggleAction *)gtk_action_group_get_action( */
+/* 			menu_action_group, "ruled"); */
+/* 	/\* Pick the first one of the Radio, it is how GTK references */
+/* 	   the group in the future. */
+/* 	*\/ */
+/* 	default_sview_config.action_tab = */
+/* 		(GtkRadioAction *)gtk_action_group_get_action( */
+/* 			menu_action_group, "tab_top"); */
+/* 	/\* g_print("action grid is %x\n", default_sview_config.action_grid); *\/ */
+/* 	/\* Finally, return the actual menu bar created by the item factory. *\/ */
+/* 	return gtk_ui_manager_get_widget (g_ui_manager, "/main"); */
 }
 
 void *_popup_thr_main(void *arg)
 {
-	popup_thr(arg);
+	/* popup_thr(arg); */
 	return NULL;
 }
 
-static void _get_info_tabs(GtkTable *table, display_data_t *display_data)
+static void _get_info_tabs(GtkGrid *grid, display_data_t *display_data)
 {
 	int i;
 	static bool init = 0;
 
-	if (!table || init) {
+	if (!grid || init) {
 		return;
 	}
 
@@ -1041,10 +1193,14 @@ static void _get_info_tabs(GtkTable *table, display_data_t *display_data)
 			default_sview_config.page_check_widget[i] =
 				gtk_check_button_new_with_label(
 					main_display_data[i].name);
-		gtk_table_attach_defaults(
-			table,
+		/* gtk_grid_attach_defaults( */
+		/* 	grid, */
+		/* 	default_sview_config.page_check_widget[i], */
+		/* 	0, 1, i, i+1); */
+		gtk_grid_attach(
+			grid,
 			default_sview_config.page_check_widget[i],
-			0, 1, i, i+1);
+			0, i, 1, 1);
 		gtk_toggle_button_set_active(
 			GTK_TOGGLE_BUTTON(
 				default_sview_config.page_check_widget[i]),
@@ -1056,7 +1212,7 @@ static void _get_info_tabs(GtkTable *table, display_data_t *display_data)
 			main_display_data+i);
 	}
 
-	gtk_widget_show_all(GTK_WIDGET(table));
+	gtk_widget_show_all(GTK_WIDGET(grid));
 	return;
 
 }
@@ -1066,8 +1222,8 @@ extern void _change_cluster_main(GtkComboBox *combo, gpointer extra)
 	GtkTreeModel *model;
 	GtkTreeIter iter;
 	slurmdb_cluster_rec_t *cluster_rec = NULL;
-	char *tmp, *ui_description, *selected_name;
-	GError *error = NULL;
+	char *tmp, *selected_name;
+	/* GError *error = NULL; */
 	GtkWidget *node_tab = NULL;
 	int rc;
 	bool got_grid = 0;
@@ -1125,8 +1281,10 @@ extern void _change_cluster_main(GtkComboBox *combo, gpointer extra)
 		working_sview_config.grid_hori = default_sview_config.grid_hori;
 		working_sview_config.grid_vert = default_sview_config.grid_vert;
 	}
-	gtk_table_set_col_spacings(main_grid_table, 0);
-	gtk_table_set_row_spacings(main_grid_table, 0);
+	gtk_widget_set_margin_start(GTK_WIDGET(main_grid_grid), 0);
+	gtk_widget_set_margin_end(GTK_WIDGET(main_grid_grid), 0);
+	gtk_widget_set_margin_start(GTK_WIDGET(main_grid_grid), 0);
+	gtk_widget_set_margin_end(GTK_WIDGET(main_grid_grid), 0);
 
 	if (!orig_cluster_name)
 		orig_cluster_name = slurm_get_cluster_name();
@@ -1148,17 +1306,17 @@ extern void _change_cluster_main(GtkComboBox *combo, gpointer extra)
 			gtk_widget_show(grid_window);
 	}
 
-	/* set up menu */
-	ui_description = _get_ui_description();
-	gtk_ui_manager_remove_ui(g_ui_manager, g_menu_id);
-	if (!(g_menu_id = gtk_ui_manager_add_ui_from_string(
-		      g_ui_manager, ui_description, -1, &error))) {
-		xfree(ui_description);
-		g_error("building menus failed: %s", error->message);
-		g_error_free (error);
-		exit (0);
-	}
-	xfree(ui_description);
+/* 	/\* set up menu *\/ */
+/* 	ui_description = _get_ui_description(); */
+/* 	/\* gtk_ui_manager_remove_ui(g_ui_manager, g_menu_id); *\/ */
+/* 	/\* if (!(g_menu_id = gtk_ui_manager_add_ui_from_string( *\/ */
+/* 	/\* 	      g_ui_manager, ui_description, -1, &error))) { *\/ */
+/* 	/\* 	xfree(ui_description); *\/ */
+/* 	/\* 	g_error("building menus failed: %s", error->message); *\/ */
+/* 	/\* 	g_error_free (error); *\/ */
+/* 	/\* 	exit (0); *\/ */
+/* 	/\* } *\/ */
+/* 	xfree(ui_description); */
 
 	/* make changes for each object */
 	cluster_change_front_end();
@@ -1191,9 +1349,9 @@ extern void _change_cluster_main(GtkComboBox *combo, gpointer extra)
 					      node_tab);
 #ifdef GTK2_USE_GET_FOCUS
 
-	/* ok, now we have a table which we have set up to contain an
+	/* ok, now we have a grid which we have set up to contain an
 	 * event_box which contains the label we are interested.  We
-	 * setup this label to be the focus child of the table, so all
+	 * setup this label to be the focus child of the grid, so all
 	 * we have to do is grab that and we are set. */
 	node_tab = gtk_container_get_focus_child(GTK_CONTAINER(node_tab));
 #else
@@ -1234,7 +1392,7 @@ extern void _change_cluster_main(GtkComboBox *combo, gpointer extra)
 	}
 
 	/* reinit */
-	rc = get_system_stats(main_grid_table);
+	rc = get_system_stats(main_grid_grid);
 
 	if (rc == SLURM_SUCCESS) {
 		/* It turns out if we didn't have the grid (cluster
@@ -1249,7 +1407,7 @@ extern void _change_cluster_main(GtkComboBox *combo, gpointer extra)
 			   needs to be done again here.
 			*/
 			FREE_NULL_LIST(grid_button_list);
-			get_system_stats(main_grid_table);
+			get_system_stats(main_grid_grid);
 		}
 
 		refresh_main(NULL, NULL);
@@ -1358,7 +1516,7 @@ static GtkWidget *_create_cluster_combo(void)
 	return combo;
 }
 
-extern void refresh_main(GtkAction *action, gpointer user_data)
+extern void refresh_main(GtkWidget *action, gpointer user_data)
 {
 	int page = gtk_notebook_get_current_page(GTK_NOTEBOOK(main_notebook));
 	if (page == -1)
@@ -1432,13 +1590,13 @@ extern void close_tab(GtkWidget *widget, GdkEventButton *event,
 	//g_print("hid %d\n", display_data->extra);
 }
 
-int main(int argc, char **argv)
+int main(int argc, char *argv[])
 {
 	GtkWidget *menubar = NULL;
-	GtkWidget *table = NULL;
-	GtkWidget *combo = NULL;
-	GtkBin *bin = NULL;
-	GtkViewport *view = NULL;
+	GtkWidget *grid = NULL, *large_grid;
+	GtkWidget *combo = NULL, *main_vbox = NULL;
+	/* GtkBin *bin = NULL; */
+	/* GtkViewport *view = NULL; */
 	int i=0;
 	log_options_t lopts = LOG_OPTS_STDERR_ONLY;
 
@@ -1452,27 +1610,19 @@ int main(int argc, char **argv)
 
 	_init_pages();
 	sview_thread_init(NULL);
-	gdk_threads_init();
-	gdk_threads_enter();
+	//gdk_threads_init();
+	//gdk_threads_enter();
 	/* Initialize GTK */
 	gtk_init (&argc, &argv);
 	sview_mutex_new(&sview_mutex);
 	sview_mutex_new(&grid_mutex);
 	sview_cond_new(&grid_cond);
-	/* make sure the system is up */
-	grid_window = GTK_WIDGET(create_scrolled_window());
-	bin = GTK_BIN(&GTK_SCROLLED_WINDOW(grid_window)->container);
-	view = GTK_VIEWPORT(bin->child);
-	bin = GTK_BIN(&view->bin);
-	main_grid_table = GTK_TABLE(bin->child);
-	gtk_table_set_homogeneous(main_grid_table, true);
-	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(grid_window),
-				       GTK_POLICY_NEVER,
-				       GTK_POLICY_AUTOMATIC);
 
 	/* fill in all static info for pages */
 	/* Make a window */
 	main_window = gtk_dialog_new();
+	main_gdk_win = gtk_widget_get_window(main_window);
+	gtk_window_set_default_size(GTK_WINDOW(main_window), 400, 400);
 	gtk_window_set_type_hint(GTK_WINDOW(main_window),
 				 GDK_WINDOW_TYPE_HINT_NORMAL);
 	g_signal_connect(G_OBJECT(main_window), "delete_event",
@@ -1482,51 +1632,81 @@ int main(int argc, char **argv)
 	gtk_window_set_default_size(GTK_WINDOW(main_window),
 				    working_sview_config.main_width,
 				    working_sview_config.main_height);
-	gtk_container_set_border_width(
-		GTK_CONTAINER(GTK_DIALOG(main_window)->vbox), 1);
+	main_vbox = gtk_dialog_get_content_area(GTK_DIALOG(main_window));
+	gtk_container_set_border_width(GTK_CONTAINER(main_vbox), 1);
+
 	/* Create the main notebook, place the position of the tabs */
 	main_notebook = gtk_notebook_new();
-	g_signal_connect(G_OBJECT(main_notebook), "switch_page",
-			 G_CALLBACK(_page_switched),
-			 NULL);
-	table = gtk_table_new(1, 3, false);
-	gtk_table_set_homogeneous(GTK_TABLE(table), false);
-	gtk_container_set_border_width(GTK_CONTAINER(table), 1);
-	/* Create a menu */
-	menubar = _get_menubar_menu(main_window, main_notebook);
-	gtk_table_attach_defaults(GTK_TABLE(table), menubar, 0, 1, 0, 1);
-
-	if ((combo = _create_cluster_combo())) {
-		GtkWidget *label = gtk_label_new("Cluster ");
-		gtk_table_attach(GTK_TABLE(table), label, 1, 2, 0, 1,
-				 GTK_FILL, GTK_SHRINK, 0, 0);
-		gtk_table_attach(GTK_TABLE(table), combo, 2, 3, 0, 1,
-				 GTK_FILL, GTK_SHRINK, 0, 0);
-	}
+	gtk_widget_set_hexpand(main_notebook, TRUE);
+	gtk_widget_set_vexpand(main_notebook, TRUE);
 	gtk_notebook_popup_enable(GTK_NOTEBOOK(main_notebook));
 	gtk_notebook_set_scrollable(GTK_NOTEBOOK(main_notebook), true);
 	gtk_notebook_set_tab_pos(GTK_NOTEBOOK(main_notebook),
 				 working_sview_config.tab_pos);
+	g_signal_connect(G_OBJECT(main_notebook), "switch_page",
+			 G_CALLBACK(_page_switched),
+			 NULL);
+
+	/* large_grid will contain all elements of sview's view */
+	large_grid = sview_create_gtk_grid(true);
+	gtk_container_set_border_width(GTK_CONTAINER(large_grid), 1);
+	gtk_box_pack_start(GTK_BOX(main_vbox),
+			   large_grid, true, true, 0);
+
+	grid = sview_create_gtk_grid(false);
+	gtk_grid_set_row_homogeneous(GTK_GRID(grid), false);
+	gtk_grid_set_column_homogeneous(GTK_GRID(grid), true);
+
+	gtk_container_set_border_width(GTK_CONTAINER(grid), 1);
+	/* Create a menu */
+	menubar = _get_menubar_menu(main_window, main_notebook);
+	gtk_grid_attach(GTK_GRID(grid), menubar, 0, 0, 4, 1);
+
+	if ((combo = _create_cluster_combo())) {
+		GtkWidget *label = gtk_label_new("Cluster ");
+		gtk_widget_set_halign (label, GTK_ALIGN_END);
+		gtk_grid_attach(GTK_GRID(grid), label, 5, 0, 1, 1);
+
+		gtk_grid_attach(GTK_GRID(grid), combo, 6, 0, 1, 1);
+		/* gtk_grid_attach(GTK_GRID(grid), label, 1, 2, 0, 1, */
+		/* 		 GTK_FILL, GTK_SHRINK, 0, 0); */
+		/* gtk_grid_attach(GTK_GRID(grid), combo, 2, 3, 0, 1, */
+		/* 		 GTK_FILL, GTK_SHRINK, 0, 0); */
+	}
+
+	gtk_grid_attach(GTK_GRID(large_grid), grid, 0, 0, 20, 1);
+
+
+	/* Make the node grid */
+	grid_window = GTK_WIDGET(create_scrolled_window());
+	main_grid_grid = sview_get_grid_from_window(
+		GTK_SCROLLED_WINDOW(grid_window));
+	gtk_grid_set_row_homogeneous(main_grid_grid, false);
+	gtk_grid_set_column_homogeneous(main_grid_grid, false);
+	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(grid_window),
+				       GTK_POLICY_NEVER,
+				       GTK_POLICY_AUTOMATIC);
+	gtk_grid_attach(GTK_GRID(large_grid), grid_window, 0, 1, 1, 10);
+	gtk_grid_attach(GTK_GRID(large_grid), main_notebook, 1, 1, 19, 10);
 
 	main_statusbar = gtk_statusbar_new();
-	gtk_statusbar_set_has_resize_grip(GTK_STATUSBAR(main_statusbar),
-					  false);
-	/* Pack it all together */
-	gtk_box_pack_start(GTK_BOX(GTK_DIALOG(main_window)->vbox),
-			   table, false, false, 0);
-	table = gtk_table_new(1, 2, false);
+	gtk_widget_set_hexpand(main_statusbar, TRUE);
+	gtk_grid_attach(GTK_GRID(large_grid), main_statusbar, 0, 11, 20, 1);
+	/* gtk_grid_attach(GTK_GRID(grid), grid_window, 0, 1, 0, 1, */
+	/* 		 GTK_SHRINK, GTK_EXPAND | GTK_FILL, */
+	/* 		 0, 0); */
+	/* gtk_grid_attach(GTK_GRID(grid), main_notebook, 1, 0, 1, 1); */
 
-	gtk_table_attach(GTK_TABLE(table), grid_window, 0, 1, 0, 1,
-			 GTK_SHRINK, GTK_EXPAND | GTK_FILL,
-			 0, 0);
-	gtk_table_attach_defaults(GTK_TABLE(table), main_notebook, 1, 2, 0, 1);
+	/* gtk_container_add(GTK_CONTAINER(main_vbox), grid); */
+	/* gtk_container_add(GTK_CONTAINER(main_vbox), main_statusbar); */
 
-	gtk_box_pack_start(GTK_BOX(GTK_DIALOG(main_window)->vbox),
-			   table, true, true, 0);
-	gtk_box_pack_start(GTK_BOX(GTK_DIALOG(main_window)->vbox),
-			   main_statusbar, false, false, 0);
+	/* gtk_box_pack_start(GTK_BOX(main_vbox), */
+	/* 		   grid, true, true, 0); */
+	/* gtk_box_pack_start(GTK_BOX(main_vbox), */
+	/* 		   main_statusbar, false, false, 0); */
 
-	in_process_cursor = gdk_cursor_new(GDK_WATCH);
+	in_process_cursor = gdk_cursor_new_for_display(
+		gdk_display_get_default(), GDK_WATCH);
 
 	for(i=0; i<PAGE_CNT; i++) {
 		if (main_display_data[i].id == -1)
@@ -1574,16 +1754,16 @@ int main(int argc, char **argv)
 	   it here.
 	*/
 	if (gtk_notebook_get_current_page(GTK_NOTEBOOK(main_notebook))
-	    == working_sview_config.default_page)
+	    == working_sview_config.default_page) {
 		_page_switched(GTK_NOTEBOOK(main_notebook), NULL,
 			       working_sview_config.default_page, NULL);
-	else
+	} else
 		gtk_notebook_set_current_page(GTK_NOTEBOOK(main_notebook),
 					      working_sview_config.
 					      default_page);
 
 	/* Finished! */
-	gtk_main ();
-	gdk_threads_leave();
+	gtk_main();
+//	gdk_threads_leave();
 	return 0;
 }

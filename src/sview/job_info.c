@@ -35,7 +35,7 @@
 
 #include "src/common/uid.h"
 #include "src/common/node_select.h"
-#include "src/sview/sview.h"
+#include "sview.h"
 #include "src/common/parse_time.h"
 #include "src/common/proc_args.h"
 #include "src/common/xstring.h"
@@ -44,7 +44,7 @@
 #define MAX_CANCEL_RETRY 10
 #define SIZE(a) (sizeof(a)/sizeof(a[0]))
 
-/* We do not read the node table here, but allocated space for up to
+/* We do not read the node grid here, but allocated space for up to
  * MAX_NODE_SPACE nodes and generate fatal error if we go higher. Increase
  * this value if needed */
 #ifndef SVIEW_MAX_NODE_SPACE
@@ -1125,22 +1125,17 @@ static GtkWidget *_admin_full_edit_job(job_desc_msg_t *job_msg,
 				       GtkTreeModel *model, GtkTreeIter *iter)
 {
 	GtkScrolledWindow *window = create_scrolled_window();
-	GtkBin *bin = NULL;
-	GtkViewport *view = NULL;
-	GtkTable *table = NULL;
+	GtkGrid *grid = NULL;
 	int i = 0, row = 0;
 	display_data_t *display_data = display_data_job;
 
 	gtk_scrolled_window_set_policy(window,
 				       GTK_POLICY_NEVER,
 				       GTK_POLICY_AUTOMATIC);
-	bin = GTK_BIN(&window->container);
-	view = GTK_VIEWPORT(bin->child);
-	bin = GTK_BIN(&view->bin);
-	table = GTK_TABLE(bin->child);
-	gtk_table_resize(table, SORTID_CNT, 2);
 
-	gtk_table_set_homogeneous(table, false);
+	grid = sview_get_grid_from_window(window);
+	gtk_grid_set_row_homogeneous(GTK_GRID(grid), false);
+	gtk_grid_set_column_homogeneous(GTK_GRID(grid), false);
 
 	for(i = 0; i < SORTID_CNT; i++) {
 		while (display_data++) {
@@ -1151,7 +1146,7 @@ static GtkWidget *_admin_full_edit_job(job_desc_msg_t *job_msg,
 			if (display_data->id != i)
 				continue;
 			display_admin_edit(
-				table, job_msg, &row, model, iter,
+				grid, job_msg, &row, model, iter,
 				display_data,
 				G_CALLBACK(_admin_edit_combo_box_job),
 				G_CALLBACK(_admin_focus_out_job),
@@ -1160,7 +1155,6 @@ static GtkWidget *_admin_full_edit_job(job_desc_msg_t *job_msg,
 		}
 		display_data = display_data_job;
 	}
-	gtk_table_resize(table, row, 2);
 
 	return GTK_WIDGET(window);
 }
@@ -3252,10 +3246,10 @@ void _display_info_job(List info_list, popup_info_t *popup_win)
 
 need_refresh:
 	if (!spec_info->display_widget) {
-		treeview = create_treeview_2cols_attach_to_table(
-			popup_win->table);
+		treeview = create_treeview_2cols_attach_to_grid(
+			popup_win->grid);
 		spec_info->display_widget =
-			gtk_widget_ref(GTK_WIDGET(treeview));
+			g_object_ref(GTK_WIDGET(treeview));
 	} else {
 		treeview = GTK_TREE_VIEW(spec_info->display_widget);
 		update = 1;
@@ -3414,22 +3408,18 @@ extern GtkWidget *create_job_entry(job_desc_msg_t *job_msg,
 				   GtkTreeModel *model, GtkTreeIter *iter)
 {
 	GtkScrolledWindow *window = create_scrolled_window();
-	GtkBin *bin = NULL;
-	GtkViewport *view = NULL;
-	GtkTable *table = NULL;
+	GtkGrid *grid = NULL;
 	int row = 0;
 	display_data_t *display_data = create_data_job;
 
 	gtk_scrolled_window_set_policy(window,
 				       GTK_POLICY_NEVER,
 				       GTK_POLICY_AUTOMATIC);
-	bin = GTK_BIN(&window->container);
-	view = GTK_VIEWPORT(bin->child);
-	bin = GTK_BIN(&view->bin);
-	table = GTK_TABLE(bin->child);
-	gtk_table_resize(table, SORTID_CNT, 2);
 
-	gtk_table_set_homogeneous(table, false);
+	grid = sview_get_grid_from_window(window);
+
+	gtk_grid_set_row_homogeneous(grid, false);
+	gtk_grid_set_column_homogeneous(grid, false);
 
 	/* NOTE: We build this in the order defined in the data structure
 	 * rather than in SORTID order for more flexibility. */
@@ -3438,18 +3428,17 @@ extern GtkWidget *create_job_entry(job_desc_msg_t *job_msg,
 			break;
 		if (!display_data->name)
 			continue;
-		display_admin_edit(table, job_msg, &row, model, iter,
+		display_admin_edit(grid, job_msg, &row, model, iter,
 				   display_data,
 				   G_CALLBACK(_admin_edit_combo_box_job),
 				   G_CALLBACK(_admin_focus_out_job),
 				   _set_active_combo_job);
 	}
-	gtk_table_resize(table, row, 2);
 
 	return GTK_WIDGET(window);
 }
 
-extern void refresh_job(GtkAction *action, gpointer user_data)
+extern void refresh_job(GtkWidget *action, gpointer user_data)
 {
 	popup_info_t *popup_win = (popup_info_t *)user_data;
 	xassert(popup_win);
@@ -3743,7 +3732,7 @@ no_input:
 	g_mutex_unlock(sview_mutex);
 }
 
-extern void get_info_job(GtkTable *table, display_data_t *display_data)
+extern void get_info_job(GtkGrid *grid, display_data_t *display_data)
 {
 	int job_error_code = SLURM_SUCCESS;
 	int step_error_code = SLURM_SUCCESS;
@@ -3768,7 +3757,7 @@ extern void get_info_job(GtkTable *table, display_data_t *display_data)
 	set_opts = true;
 
 	/* reset */
-	if (!table && !display_data) {
+	if (!grid && !display_data) {
 		if (display_widget)
 			gtk_widget_destroy(display_widget);
 		display_widget = NULL;
@@ -3779,7 +3768,7 @@ extern void get_info_job(GtkTable *table, display_data_t *display_data)
 
 	if (display_data)
 		local_display_data = display_data;
-	if (!table) {
+	if (!grid) {
 		display_data_job->set_menu = local_display_data->set_menu;
 		return;
 	}
@@ -3801,9 +3790,10 @@ extern void get_info_job(GtkTable *table, display_data_t *display_data)
 		sprintf(error_char, "slurm_load_jobs: %s",
 			slurm_strerror(slurm_get_errno()));
 		label = gtk_label_new(error_char);
-		gtk_table_attach_defaults(table, label, 0, 1, 0, 1);
+		gtk_grid_attach(grid, label, 0, 0, 1, 1);
+		/* gtk_grid_attach_defaults(grid, label, 0, 1, 0, 1); */
 		gtk_widget_show(label);
-		display_widget = gtk_widget_ref(GTK_WIDGET(label));
+		display_widget = g_object_ref(GTK_WIDGET(label));
 		goto end_it;
 	}
 
@@ -3822,9 +3812,10 @@ extern void get_info_job(GtkTable *table, display_data_t *display_data)
 		sprintf(error_char, "slurm_load_job_step: %s",
 			slurm_strerror(slurm_get_errno()));
 		label = gtk_label_new(error_char);
-		gtk_table_attach_defaults(table, label, 0, 1, 0, 1);
+		gtk_grid_attach(grid, label, 0, 0, 1, 1);
+		/* gtk_grid_attach_defaults(grid, label, 0, 1, 0, 1); */
 		gtk_widget_show(label);
-		display_widget = gtk_widget_ref(GTK_WIDGET(label));
+		display_widget = g_object_ref(GTK_WIDGET(label));
 		goto end_it;
 	}
 display_it:
@@ -3897,10 +3888,13 @@ display_it:
 		gtk_tree_selection_set_mode(
 			gtk_tree_view_get_selection(tree_view),
 			GTK_SELECTION_MULTIPLE);
-		display_widget = gtk_widget_ref(GTK_WIDGET(tree_view));
-		gtk_table_attach_defaults(GTK_TABLE(table),
-					  GTK_WIDGET(tree_view),
-					  0, 1, 0, 1);
+		display_widget = g_object_ref(GTK_WIDGET(tree_view));
+		gtk_grid_attach(GTK_GRID(grid),
+				GTK_WIDGET(tree_view),
+				0, 0, 1, 1);
+		/* gtk_grid_attach_defaults(GTK_GRID(grid), */
+		/* 			  GTK_WIDGET(tree_view), */
+		/* 			  0, 1, 0, 1); */
 		/* since this function sets the model of the tree_view to the
 		 * treestore we don't really care about the return value */
 		create_treestore(tree_view, display_data_job,
@@ -3921,8 +3915,8 @@ end_it:
 	force_refresh = false;
 
 reset_curs:
-	if (main_window && main_window->window)
-		gdk_window_set_cursor(main_window->window, NULL);
+	if (main_gdk_win)
+		gdk_window_set_cursor(main_gdk_win, NULL);
 	return;
 }
 
@@ -3972,11 +3966,14 @@ extern void specific_info_job(popup_info_t *popup_win)
 		sprintf(error_char, "slurm_load_jobs: %s",
 			slurm_strerror(slurm_get_errno()));
 		label = gtk_label_new(error_char);
-		gtk_table_attach_defaults(GTK_TABLE(popup_win->table),
-					  label,
-					  0, 1, 0, 1);
+		gtk_grid_attach(GTK_GRID(popup_win->grid),
+				label,
+				0, 0, 1, 1);
+		/* gtk_grid_attach_defaults(GTK_GRID(popup_win->grid), */
+		/* 			  label, */
+		/* 			  0, 1, 0, 1); */
 		gtk_widget_show(label);
-		spec_info->display_widget = gtk_widget_ref(GTK_WIDGET(label));
+		spec_info->display_widget = g_object_ref(GTK_WIDGET(label));
 		goto end_it;
 	}
 
@@ -3996,10 +3993,12 @@ extern void specific_info_job(popup_info_t *popup_win)
 		sprintf(error_char, "slurm_load_job_step: %s",
 			slurm_strerror(slurm_get_errno()));
 		label = gtk_label_new(error_char);
-		gtk_table_attach_defaults(popup_win->table, label,
-					  0, 1, 0, 1);
+		gtk_grid_attach(popup_win->grid, label,
+				0, 0, 1, 1);
+		/* gtk_grid_attach_defaults(popup_win->grid, label, */
+		/* 			  0, 1, 0, 1); */
 		gtk_widget_show(label);
-		spec_info->display_widget = gtk_widget_ref(GTK_WIDGET(label));
+		spec_info->display_widget = g_object_ref(GTK_WIDGET(label));
 		goto end_it;
 	}
 display_it:
@@ -4020,10 +4019,13 @@ display_it:
 			gtk_tree_view_get_selection(tree_view),
 			GTK_SELECTION_MULTIPLE);
 		spec_info->display_widget =
-			gtk_widget_ref(GTK_WIDGET(tree_view));
-		gtk_table_attach_defaults(popup_win->table,
-					  GTK_WIDGET(tree_view),
-					  0, 1, 0, 1);
+			g_object_ref(GTK_WIDGET(tree_view));
+		gtk_grid_attach(popup_win->grid,
+				GTK_WIDGET(tree_view),
+				0, 0, 1, 1);
+		/* gtk_grid_attach_defaults(popup_win->grid, */
+		/* 			  GTK_WIDGET(tree_view), */
+		/* 			  0, 1, 0, 1); */
 		/* since this function sets the model of the tree_view to the
 		 * treestore we don't really care about the return value */
 		create_treestore(tree_view, popup_win->display_data,
@@ -4568,6 +4570,7 @@ static void _edit_each_job(GtkTreeModel *model, GtkTreeIter *iter,
 	jobs_foreach_t *job_foreach = NULL;
 	job_desc_msg_t *job_msg;
 	ListIterator itr = NULL;
+	GtkWidget *vbox = NULL;
 
 	itr = list_iterator_create(foreach_list);
 	while ((job_foreach = list_next(itr))) {
@@ -4580,14 +4583,18 @@ static void _edit_each_job(GtkTreeModel *model, GtkTreeIter *iter,
 				GTK_WINDOW(main_window),
 				GTK_DIALOG_MODAL |
 				GTK_DIALOG_DESTROY_WITH_PARENT,
+				"_Ok",
+				GTK_RESPONSE_OK,
+				"_Cancel",
+				GTK_RESPONSE_CANCEL,
 				NULL);
 		gtk_window_set_type_hint(GTK_WINDOW(popup),
 					 GDK_WINDOW_TYPE_HINT_NORMAL);
 		gtk_window_set_transient_for(GTK_WINDOW(popup), NULL);
 		label = gtk_dialog_add_button(GTK_DIALOG(popup),
-					      GTK_STOCK_OK, GTK_RESPONSE_OK);
+					      "_OK", GTK_RESPONSE_OK);
 		gtk_window_set_default(GTK_WINDOW(popup), label);
-		gtk_dialog_add_button(GTK_DIALOG(popup), GTK_STOCK_CANCEL,
+		gtk_dialog_add_button(GTK_DIALOG(popup), "_Cancel",
 				      GTK_RESPONSE_CANCEL);
 		gtk_dialog_add_button(GTK_DIALOG(popup), "Cancel all",
 				      GTK_RESPONSE_DELETE_EVENT);
@@ -4601,10 +4608,11 @@ static void _edit_each_job(GtkTreeModel *model, GtkTreeIter *iter,
 		slurm_init_job_desc_msg(job_msg);
 		job_msg->job_id = job_foreach->job_id;
 		entry = _admin_full_edit_job(job_msg, model, iter);
-		gtk_box_pack_start(GTK_BOX(GTK_DIALOG(popup)->vbox),
+		vbox = gtk_dialog_get_content_area(GTK_DIALOG(popup));
+		gtk_box_pack_start(GTK_BOX(vbox),
 				   label, false, false, 0);
 		if (entry)
-			gtk_box_pack_start(GTK_BOX(GTK_DIALOG(popup)->vbox),
+			gtk_box_pack_start(GTK_BOX(vbox),
 					   entry, true, true, 0);
 		gtk_widget_show_all(popup);
 		response = gtk_dialog_run(GTK_DIALOG(popup));
@@ -4683,6 +4691,7 @@ extern void admin_job(GtkTreeModel *model, GtkTreeIter *iter,
 	GtkWidget *label = NULL;
 	GtkWidget *entry = NULL;
 	GtkWidget *popup;
+	GtkWidget *vbox = NULL;
 	char *tmp_jobid, *offset;
 
 	if (xstrcmp(type, "Edit Job") == 0)
@@ -4692,6 +4701,10 @@ extern void admin_job(GtkTreeModel *model, GtkTreeIter *iter,
 			type,
 			GTK_WINDOW(main_window),
 			GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+			"_Ok",
+			GTK_RESPONSE_OK,
+			"_Cancel",
+			GTK_RESPONSE_CANCEL,
 			NULL);
 	gtk_window_set_type_hint(GTK_WINDOW(popup),
 				 GDK_WINDOW_TYPE_HINT_NORMAL);
@@ -4724,30 +4737,30 @@ extern void admin_job(GtkTreeModel *model, GtkTreeIter *iter,
 
 	if (!xstrcasecmp("Signal", type)) {
 		label = gtk_dialog_add_button(GTK_DIALOG(popup),
-					      GTK_STOCK_OK, GTK_RESPONSE_OK);
+					      "_OK", GTK_RESPONSE_OK);
 		gtk_window_set_default(GTK_WINDOW(popup), label);
 		gtk_dialog_add_button(GTK_DIALOG(popup),
-				      GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL);
+				      "_Cancel", GTK_RESPONSE_CANCEL);
 
 		entry = create_entry();
 		label = gtk_label_new("Signal?");
 		edit_type = EDIT_SIGNAL;
 	} else if (!xstrcasecmp("Requeue", type)) {
 		label = gtk_dialog_add_button(GTK_DIALOG(popup),
-					      GTK_STOCK_YES, GTK_RESPONSE_OK);
+					      "_Yes", GTK_RESPONSE_OK);
 		gtk_window_set_default(GTK_WINDOW(popup), label);
 		gtk_dialog_add_button(GTK_DIALOG(popup),
-				      GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL);
+				      "_Cancel", GTK_RESPONSE_CANCEL);
 		snprintf(tmp_char, sizeof(tmp_char),
 			 "Are you sure you want to requeue these job(s)?");
 		label = gtk_label_new(tmp_char);
 		edit_type = EDIT_REQUEUE;
 	} else if (!xstrcasecmp("Cancel", type)) {
 		label = gtk_dialog_add_button(GTK_DIALOG(popup),
-					      GTK_STOCK_YES, GTK_RESPONSE_OK);
+					      "_Yes", GTK_RESPONSE_OK);
 		gtk_window_set_default(GTK_WINDOW(popup), label);
 		gtk_dialog_add_button(GTK_DIALOG(popup),
-				      GTK_STOCK_NO, GTK_RESPONSE_CANCEL);
+				      "_No", GTK_RESPONSE_CANCEL);
 
 		if (stepid != NO_VAL)
 			snprintf(tmp_char, sizeof(tmp_char),
@@ -4761,10 +4774,10 @@ extern void admin_job(GtkTreeModel *model, GtkTreeIter *iter,
 		edit_type = EDIT_CANCEL;
 	} else if (!xstrcasecmp("Suspend/Resume", type)) {
 		label = gtk_dialog_add_button(GTK_DIALOG(popup),
-					      GTK_STOCK_YES, GTK_RESPONSE_OK);
+					      "_Yes", GTK_RESPONSE_OK);
 		gtk_window_set_default(GTK_WINDOW(popup), label);
 		gtk_dialog_add_button(GTK_DIALOG(popup),
-				      GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL);
+				      "_Cancel", GTK_RESPONSE_CANCEL);
 
 		if (stepid != NO_VAL)
 			snprintf(tmp_char, sizeof(tmp_char),
@@ -4778,10 +4791,11 @@ extern void admin_job(GtkTreeModel *model, GtkTreeIter *iter,
 		edit_type = EDIT_SUSPEND;
 	}
 
-	gtk_box_pack_start(GTK_BOX(GTK_DIALOG(popup)->vbox),
+	vbox = gtk_dialog_get_content_area(GTK_DIALOG(popup));
+	gtk_box_pack_start(GTK_BOX(vbox),
 			   label, false, false, 0);
 	if (entry)
-		gtk_box_pack_start(GTK_BOX(GTK_DIALOG(popup)->vbox),
+		gtk_box_pack_start(GTK_BOX(vbox),
 				   entry, true, true, 0);
 	gtk_widget_show_all(popup);
 	response = gtk_dialog_run (GTK_DIALOG(popup));

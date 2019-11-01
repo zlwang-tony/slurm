@@ -24,7 +24,7 @@
 \*****************************************************************************/
 
 #include "src/common/uid.h"
-#include "src/sview/sview.h"
+#include "sview.h"
 #include "src/common/parse_time.h"
 #include "src/common/proc_args.h"
 #include "src/common/strlcpy.h"
@@ -531,10 +531,10 @@ static void _display_info_bb(List info_list, popup_info_t *popup_win)
 	}
 
 	if (!spec_info->display_widget) {
-		treeview = create_treeview_2cols_attach_to_table(
-			popup_win->table);
+		treeview = create_treeview_2cols_attach_to_grid(
+			popup_win->grid);
 		spec_info->display_widget =
-			gtk_widget_ref(GTK_WIDGET(treeview));
+			g_object_ref(GTK_WIDGET(treeview));
 	} else {
 		treeview = GTK_TREE_VIEW(spec_info->display_widget);
 		update = 1;
@@ -582,7 +582,7 @@ finished:
 /* } */
 
 /* Fresh the Burst Buffer information */
-extern void refresh_bb(GtkAction *action, gpointer user_data)
+extern void refresh_bb(GtkWidget *action, gpointer user_data)
 {
 	popup_info_t *popup_win = (popup_info_t *)user_data;
 	xassert(popup_win);
@@ -654,7 +654,7 @@ extern void admin_edit_bb(GtkCellRendererText *cell,
 	/* NOP */
 }
 
-extern void get_info_bb(GtkTable *table, display_data_t *display_data)
+extern void get_info_bb(GtkGrid *grid, display_data_t *display_data)
 {
 	int error_code = SLURM_SUCCESS;
 	List info_list = NULL;
@@ -674,7 +674,7 @@ extern void get_info_bb(GtkTable *table, display_data_t *display_data)
 	set_opts = true;
 
 	/* reset */
-	if (!table && !display_data) {
+	if (!grid && !display_data) {
 		if (display_widget)
 			gtk_widget_destroy(display_widget);
 		display_widget = NULL;
@@ -684,7 +684,7 @@ extern void get_info_bb(GtkTable *table, display_data_t *display_data)
 
 	if (display_data)
 		local_display_data = display_data;
-	if (!table) {
+	if (!grid) {
 		display_data_bb->set_menu = local_display_data->set_menu;
 		goto reset_curs;
 	}
@@ -693,9 +693,9 @@ extern void get_info_bb(GtkTable *table, display_data_t *display_data)
 		if (display_widget)
 			gtk_widget_destroy(display_widget);
 		label = gtk_label_new("Not available in a federated view");
-		gtk_table_attach_defaults(GTK_TABLE(table), label, 0, 1, 0, 1);
+		gtk_grid_attach(GTK_GRID(grid), label, 0, 0, 1, 1);
 		gtk_widget_show(label);
-		display_widget = gtk_widget_ref(label);
+		display_widget = g_object_ref(label);
 		goto end_it;
 	}
 
@@ -717,9 +717,9 @@ extern void get_info_bb(GtkTable *table, display_data_t *display_data)
 		sprintf(error_char, "slurm_load_reservations: %s",
 			slurm_strerror(slurm_get_errno()));
 		label = gtk_label_new(error_char);
-		gtk_table_attach_defaults(table, label, 0, 1, 0, 1);
+		gtk_grid_attach(grid, label, 0, 0, 1, 1);
 		gtk_widget_show(label);
-		display_widget = gtk_widget_ref(GTK_WIDGET(label));
+		display_widget = g_object_ref(GTK_WIDGET(label));
 		goto end_it;
 	}
 
@@ -754,10 +754,8 @@ display_it:
 		gtk_tree_selection_set_mode(
 			gtk_tree_view_get_selection(tree_view),
 			GTK_SELECTION_MULTIPLE);
-		display_widget = gtk_widget_ref(GTK_WIDGET(tree_view));
-		gtk_table_attach_defaults(table,
-					  GTK_WIDGET(tree_view),
-					  0, 1, 0, 1);
+		display_widget = g_object_ref(GTK_WIDGET(tree_view));
+		gtk_grid_attach(grid, GTK_WIDGET(tree_view), 0, 0, 1, 1);
 		/* since this function sets the model of the tree_view
 		   to the treestore we don't really care about
 		   the return value */
@@ -772,8 +770,8 @@ end_it:
 	toggled = false;
 	force_refresh = false;
 reset_curs:
-	if (main_window && main_window->window)
-		gdk_window_set_cursor(main_window->window, NULL);
+	if (main_gdk_win)
+		gdk_window_set_cursor(main_gdk_win, NULL);
 
 	return;
 }
@@ -817,11 +815,9 @@ extern void specific_info_bb(popup_info_t *popup_win)
 		sprintf(error_char, "get_new_info_bb: %s",
 			slurm_strerror(slurm_get_errno()));
 		label = gtk_label_new(error_char);
-		gtk_table_attach_defaults(popup_win->table,
-					  label,
-					  0, 1, 0, 1);
+		gtk_grid_attach(popup_win->grid, label, 0, 0, 1, 1);
 		gtk_widget_show(label);
-		spec_info->display_widget = gtk_widget_ref(label);
+		spec_info->display_widget = g_object_ref(label);
 		goto end_it;
 	}
 
@@ -842,10 +838,9 @@ display_it:
 			gtk_tree_view_get_selection(tree_view),
 			GTK_SELECTION_MULTIPLE);
 		spec_info->display_widget =
-			gtk_widget_ref(GTK_WIDGET(tree_view));
-		gtk_table_attach_defaults(popup_win->table,
-					  GTK_WIDGET(tree_view),
-					  0, 1, 0, 1);
+			g_object_ref(GTK_WIDGET(tree_view));
+		gtk_grid_attach(popup_win->grid, GTK_WIDGET(tree_view),
+				0, 0, 1, 1);
 		/*
 		 * since this function sets the model of the tree_view
 		 * to the treestore we don't really care about

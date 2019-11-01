@@ -241,7 +241,7 @@ if test ${glib_config_minor_version=0} -ge 32 ; then
        AC_DEFINE([GLIB_NEW_THREADS], 1, [Define to 1 if using glib-2.32.0 or higher])
 fi
 
-AM_PATH_GTK_2_0([2.7.1], [ac_gtk_test="yes"], [ac_gtk_test="no"], [gthread])
+AM_PATH_GTK_3_0([3.4.0], [ac_gtk_test="yes"], [ac_gtk_test="no"], [gthread])
 if test ${gtk_config_minor_version=0} -ge 10 ; then
        AC_DEFINE([GTK2_USE_RADIO_SET], 1, [Define to 1 if using gtk+-2.10.0 or higher])
 fi
@@ -259,6 +259,8 @@ if test "x$ac_glib_test" != "xyes" -o "x$ac_gtk_test" != "xyes"; then
 fi
 
 AM_CONDITIONAL(BUILD_SVIEW, [test "x$ac_glib_test" = "xyes"] && [test "x$ac_gtk_test" = "xyes"])
+
+
 
 X_AC_CRAY
 

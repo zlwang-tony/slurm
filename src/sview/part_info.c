@@ -29,7 +29,7 @@
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA.
 \*****************************************************************************/
 
-#include "src/sview/sview.h"
+#include "sview.h"
 #include "src/common/parse_time.h"
 #include <grp.h>
 
@@ -439,38 +439,46 @@ end_it:
 
 static uint16_t _set_part_over_subscribe_popup(void)
 {
-	GtkWidget *table = gtk_table_new(1, 2, false);
+	GtkWidget *grid = sview_create_gtk_grid(false);
 	GtkWidget *label = NULL;
-	GtkObject *adjustment = gtk_adjustment_new(4,
-						   1, 1000,
-						   1, 60,
-						   0);
+	GtkAdjustment *adjustment = gtk_adjustment_new(4,
+						       1, 1000,
+						       1, 60,
+						       0);
 	GtkWidget *spin_button =
 		gtk_spin_button_new(GTK_ADJUSTMENT(adjustment), 1, 0);
 	GtkWidget *popup = gtk_dialog_new_with_buttons(
 		"Count",
 		GTK_WINDOW (main_window),
 		GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+		"_Ok",
+		GTK_RESPONSE_OK,
+		"_Cancel",
+		GTK_RESPONSE_CANCEL,
 		NULL);
 	int response = 0;
 	uint16_t count = 4;
+	GtkWidget *vbox = NULL;
 
 	gtk_window_set_type_hint(GTK_WINDOW(popup),
 				 GDK_WINDOW_TYPE_HINT_NORMAL);
 
 	label = gtk_dialog_add_button(GTK_DIALOG(popup),
-				      GTK_STOCK_OK, GTK_RESPONSE_OK);
+				      "_OK", GTK_RESPONSE_OK);
 	gtk_window_set_default(GTK_WINDOW(popup), label);
 
 	label = gtk_label_new("OverSubscribe Job Count ");
 
-	gtk_container_set_border_width(GTK_CONTAINER(table), 10);
+	gtk_container_set_border_width(GTK_CONTAINER(grid), 10);
 
-	gtk_box_pack_start(GTK_BOX(GTK_DIALOG(popup)->vbox),
-			   table, false, false, 0);
+	vbox = gtk_dialog_get_content_area(GTK_DIALOG(popup));
+	gtk_box_pack_start(GTK_BOX(vbox),
+			   grid, false, false, 0);
 
-	gtk_table_attach_defaults(GTK_TABLE(table), label, 0, 1, 0, 1);
-	gtk_table_attach_defaults(GTK_TABLE(table), spin_button, 1, 2, 0, 1);
+	gtk_grid_attach(GTK_GRID(grid), label, 0, 0, 1, 1);
+	gtk_grid_attach(GTK_GRID(grid), spin_button, 1, 0, 1, 1);
+	/* gtk_grid_attach_defaults(GTK_GRID(grid), label, 0, 1, 0, 1); */
+	/* gtk_grid_attach_defaults(GTK_GRID(grid), spin_button, 1, 2, 0, 1); */
 
 	gtk_widget_show_all(popup);
 	response = gtk_dialog_run (GTK_DIALOG(popup));
@@ -778,22 +786,17 @@ static GtkWidget *_admin_full_edit_part(update_part_msg_t *part_msg,
 					GtkTreeModel *model, GtkTreeIter *iter)
 {
 	GtkScrolledWindow *window = create_scrolled_window();
-	GtkBin *bin = NULL;
-	GtkViewport *view = NULL;
-	GtkTable *table = NULL;
+	GtkGrid *grid = NULL;
 	int i = 0, row = 0;
 	display_data_t *display_data = display_data_part;
 
 	gtk_scrolled_window_set_policy(window,
 				       GTK_POLICY_NEVER,
 				       GTK_POLICY_AUTOMATIC);
-	bin = GTK_BIN(&window->container);
-	view = GTK_VIEWPORT(bin->child);
-	bin = GTK_BIN(&view->bin);
-	table = GTK_TABLE(bin->child);
-	gtk_table_resize(table, SORTID_CNT, 2);
 
-	gtk_table_set_homogeneous(table, false);
+	grid = sview_get_grid_from_window(window);
+	gtk_grid_set_row_homogeneous(grid, false);
+	gtk_grid_set_column_homogeneous(grid, false);
 
 	for (i = 0; i < SORTID_CNT; i++) {
 		while (display_data++) {
@@ -804,7 +807,7 @@ static GtkWidget *_admin_full_edit_part(update_part_msg_t *part_msg,
 			if (display_data->id != i)
 				continue;
 			display_admin_edit(
-				table, part_msg, &row, model, iter,
+				grid, part_msg, &row, model, iter,
 				display_data,
 				G_CALLBACK(_admin_edit_combo_box_part),
 				G_CALLBACK(_admin_focus_out_part),
@@ -813,7 +816,6 @@ static GtkWidget *_admin_full_edit_part(update_part_msg_t *part_msg,
 		}
 		display_data = display_data_part;
 	}
-	gtk_table_resize(table, row, 2);
 
 	return GTK_WIDGET(window);
 }
@@ -1923,10 +1925,10 @@ static void _display_info_part(List info_list,	popup_info_t *popup_win)
 
 need_refresh:
 	if (!spec_info->display_widget) {
-		treeview = create_treeview_2cols_attach_to_table(
-			popup_win->table);
+		treeview = create_treeview_2cols_attach_to_grid(
+			popup_win->grid);
 		spec_info->display_widget =
-			gtk_widget_ref(GTK_WIDGET(treeview));
+			g_object_ref(GTK_WIDGET(treeview));
 	} else {
 		treeview = GTK_TREE_VIEW(spec_info->display_widget);
 		update = 1;
@@ -2008,22 +2010,18 @@ extern GtkWidget *create_part_entry(update_part_msg_t *part_msg,
 				    GtkTreeModel *model, GtkTreeIter *iter)
 {
 	GtkScrolledWindow *window = create_scrolled_window();
-	GtkBin *bin = NULL;
-	GtkViewport *view = NULL;
-	GtkTable *table = NULL;
+	GtkGrid *grid = NULL;
 	int i = 0, row = 0;
 	display_data_t *display_data = create_data_part;
 
 	gtk_scrolled_window_set_policy(window,
 				       GTK_POLICY_NEVER,
 				       GTK_POLICY_AUTOMATIC);
-	bin = GTK_BIN(&window->container);
-	view = GTK_VIEWPORT(bin->child);
-	bin = GTK_BIN(&view->bin);
-	table = GTK_TABLE(bin->child);
-	gtk_table_resize(table, SORTID_CNT, 2);
 
-	gtk_table_set_homogeneous(table, false);
+	grid = sview_get_grid_from_window(window);
+
+	gtk_grid_set_row_homogeneous(grid, false);
+	gtk_grid_set_column_homogeneous(grid, false);
 
 	for(i = 0; i < SORTID_CNT; i++) {
 		while (display_data++) {
@@ -2034,7 +2032,7 @@ extern GtkWidget *create_part_entry(update_part_msg_t *part_msg,
 			if (display_data->id != i)
 				continue;
 			display_admin_edit(
-				table, part_msg, &row, model, iter,
+				grid, part_msg, &row, model, iter,
 				display_data,
 				G_CALLBACK(_admin_edit_combo_box_part),
 				G_CALLBACK(_admin_focus_out_part),
@@ -2043,7 +2041,6 @@ extern GtkWidget *create_part_entry(update_part_msg_t *part_msg,
 		}
 		display_data = create_data_part;
 	}
-	gtk_table_resize(table, row, 2);
 
 	return GTK_WIDGET(window);
 }
@@ -2094,7 +2091,7 @@ extern bool check_part_includes_node(int node_dx)
 }
 
 
-extern void refresh_part(GtkAction *action, gpointer user_data)
+extern void refresh_part(GtkWidget *action, gpointer user_data)
 {
 	popup_info_t *popup_win = (popup_info_t *)user_data;
 	xassert(popup_win);
@@ -2450,7 +2447,7 @@ no_input:
 	g_mutex_unlock(sview_mutex);
 }
 
-extern void get_info_part(GtkTable *table, display_data_t *display_data)
+extern void get_info_part(GtkGrid *grid, display_data_t *display_data)
 {
 	int part_error_code = SLURM_SUCCESS;
 	int node_error_code = SLURM_SUCCESS;
@@ -2475,7 +2472,7 @@ extern void get_info_part(GtkTable *table, display_data_t *display_data)
 	set_opts = true;
 
 	/* reset */
-	if (!table && !display_data) {
+	if (!grid && !display_data) {
 		if (display_widget)
 			gtk_widget_destroy(display_widget);
 		display_widget = NULL;
@@ -2486,7 +2483,7 @@ extern void get_info_part(GtkTable *table, display_data_t *display_data)
 
 	if (display_data)
 		local_display_data = display_data;
-	if (!table) {
+	if (!grid) {
 		display_data_part->set_menu = local_display_data->set_menu;
 		goto reset_curs;
 	}
@@ -2508,8 +2505,9 @@ extern void get_info_part(GtkTable *table, display_data_t *display_data)
 		snprintf(error_char, 100, "slurm_load_partitions: %s",
 			 slurm_strerror(slurm_get_errno()));
 		label = gtk_label_new(error_char);
-		display_widget = gtk_widget_ref(GTK_WIDGET(label));
-		gtk_table_attach_defaults(table, label, 0, 1, 0, 1);
+		display_widget = g_object_ref(GTK_WIDGET(label));
+		gtk_grid_attach(grid, label, 0, 0, 1, 1);
+		/* gtk_grid_attach_defaults(grid, label, 0, 1, 0, 1); */
 		gtk_widget_show(label);
 		goto end_it;
 	}
@@ -2528,8 +2526,9 @@ extern void get_info_part(GtkTable *table, display_data_t *display_data)
 		snprintf(error_char, 100, "slurm_load_node: %s",
 			 slurm_strerror(slurm_get_errno()));
 		label = gtk_label_new(error_char);
-		display_widget = gtk_widget_ref(GTK_WIDGET(label));
-		gtk_table_attach_defaults(table, label, 0, 1, 0, 1);
+		display_widget = g_object_ref(GTK_WIDGET(label));
+		gtk_grid_attach(grid, label, 0, 0, 1, 1);
+		/* gtk_grid_attach_defaults(grid, label, 0, 1, 0, 1); */
 		gtk_widget_show(label);
 		goto end_it;
 	}
@@ -2594,10 +2593,11 @@ display_it:
 		gtk_tree_selection_set_mode(
 			gtk_tree_view_get_selection(tree_view),
 			GTK_SELECTION_MULTIPLE);
-		display_widget = gtk_widget_ref(GTK_WIDGET(tree_view));
-		gtk_table_attach_defaults(table,
-					  GTK_WIDGET(tree_view),
-					  0, 1, 0, 1);
+		display_widget = g_object_ref(GTK_WIDGET(tree_view));
+		gtk_grid_attach(grid, GTK_WIDGET(tree_view), 0, 0, 1, 1);
+		/* gtk_grid_attach_defaults(grid, */
+		/* 			  GTK_WIDGET(tree_view), */
+		/* 			  0, 1, 0, 1); */
 		/* since this function sets the model of the tree_view
 		   to the treestore we don't really care about
 		   the return value */
@@ -2613,8 +2613,8 @@ end_it:
 	toggled = false;
 	force_refresh = false;
 reset_curs:
-	if (main_window && main_window->window)
-		gdk_window_set_cursor(main_window->window, NULL);
+	if (main_gdk_win)
+		gdk_window_set_cursor(main_gdk_win, NULL);
 	return;
 }
 
@@ -2660,8 +2660,9 @@ extern void specific_info_part(popup_info_t *popup_win)
 		snprintf(error_char, 100, "slurm_load_partitions: %s",
 			 slurm_strerror(slurm_get_errno()));
 		label = gtk_label_new(error_char);
-		spec_info->display_widget = gtk_widget_ref(GTK_WIDGET(label));
-		gtk_table_attach_defaults(popup_win->table, label, 0, 1, 0, 1);
+		spec_info->display_widget = g_object_ref(GTK_WIDGET(label));
+		gtk_grid_attach(popup_win->grid, label, 0, 0, 1, 1);
+		/* gtk_grid_attach_defaults(popup_win->grid, label, 0, 1, 0, 1); */
 		gtk_widget_show(label);
 		goto end_it;
 	}
@@ -2682,8 +2683,9 @@ extern void specific_info_part(popup_info_t *popup_win)
 		snprintf(error_char, 100, "slurm_load_node: %s",
 			 slurm_strerror(slurm_get_errno()));
 		label = gtk_label_new(error_char);
-		spec_info->display_widget = gtk_widget_ref(GTK_WIDGET(label));
-		gtk_table_attach_defaults(popup_win->table, label, 0, 1, 0, 1);
+		spec_info->display_widget = g_object_ref(GTK_WIDGET(label));
+		gtk_grid_attach(popup_win->grid, label, 0, 0, 1, 1);
+		/* gtk_grid_attach_defaults(popup_win->grid, label, 0, 1, 0, 1); */
 		gtk_widget_show(label);
 		goto end_it;
 	}
@@ -2709,10 +2711,13 @@ display_it:
 			GTK_SELECTION_MULTIPLE);
 
 		spec_info->display_widget =
-			gtk_widget_ref(GTK_WIDGET(tree_view));
-		gtk_table_attach_defaults(popup_win->table,
-					  GTK_WIDGET(tree_view),
-					  0, 1, 0, 1);
+			g_object_ref(GTK_WIDGET(tree_view));
+		gtk_grid_attach(popup_win->grid,
+				GTK_WIDGET(tree_view),
+				0, 0, 1, 1);
+		/* gtk_grid_attach_defaults(popup_win->grid, */
+		/* 			  GTK_WIDGET(tree_view), */
+		/* 			  0, 1, 0, 1); */
 
 		/* since this function sets the model of the tree_view
 		   to the treestore we don't really care about
@@ -3020,6 +3025,7 @@ extern void admin_part(GtkTreeModel *model, GtkTreeIter *iter, char *type)
 	GtkWidget *label = NULL;
 	GtkWidget *entry = NULL;
 	GtkWidget *popup = NULL;
+	GtkWidget *vbox = NULL;
 
 	if (cluster_flags & CLUSTER_FLAG_FED) {
 		display_fed_disabled_popup(type);
@@ -3030,6 +3036,10 @@ extern void admin_part(GtkTreeModel *model, GtkTreeIter *iter, char *type)
 		type,
 		GTK_WINDOW(main_window),
 		GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+		"_Ok",
+		GTK_RESPONSE_OK,
+		"_Cancel",
+		GTK_RESPONSE_CANCEL,
 		NULL);
 	gtk_window_set_transient_for(GTK_WINDOW(popup), NULL);
 
@@ -3070,10 +3080,10 @@ extern void admin_part(GtkTreeModel *model, GtkTreeIter *iter, char *type)
 					      renderer, "text", 0);
 
 		label = gtk_dialog_add_button(GTK_DIALOG(popup),
-					      GTK_STOCK_YES, GTK_RESPONSE_OK);
+					      "_Yes", GTK_RESPONSE_OK);
 		gtk_window_set_default(GTK_WINDOW(popup), label);
 		gtk_dialog_add_button(GTK_DIALOG(popup),
-				      GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL);
+				      "_Cancel", GTK_RESPONSE_CANCEL);
 
 		snprintf(tmp_char, sizeof(tmp_char),
 			 "Which state would you like to set partition '%s' to?",
@@ -3082,10 +3092,10 @@ extern void admin_part(GtkTreeModel *model, GtkTreeIter *iter, char *type)
 		edit_type = EDIT_PART_STATE;
 	} else if (!xstrcasecmp("Remove Partition", type)) {
 		label = gtk_dialog_add_button(GTK_DIALOG(popup),
-					      GTK_STOCK_YES, GTK_RESPONSE_OK);
+					      "_Yes", GTK_RESPONSE_OK);
 		gtk_window_set_default(GTK_WINDOW(popup), label);
 		gtk_dialog_add_button(GTK_DIALOG(popup),
-				      GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL);
+				      "_Cancel", GTK_RESPONSE_CANCEL);
 
 		snprintf(tmp_char, sizeof(tmp_char),
 			 "Are you sure you want to remove partition %s?",
@@ -3094,10 +3104,10 @@ extern void admin_part(GtkTreeModel *model, GtkTreeIter *iter, char *type)
 		edit_type = EDIT_REMOVE_PART;
 	} else if (!xstrcasecmp("Edit Partition", type)) {
 		label = gtk_dialog_add_button(GTK_DIALOG(popup),
-					      GTK_STOCK_OK, GTK_RESPONSE_OK);
+					      "_OK", GTK_RESPONSE_OK);
 		gtk_window_set_default(GTK_WINDOW(popup), label);
 		gtk_dialog_add_button(GTK_DIALOG(popup),
-				      GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL);
+				      "_Cancel", GTK_RESPONSE_CANCEL);
 
 		gtk_window_set_default_size(GTK_WINDOW(popup), 200, 400);
 		snprintf(tmp_char, sizeof(tmp_char),
@@ -3127,10 +3137,11 @@ extern void admin_part(GtkTreeModel *model, GtkTreeIter *iter, char *type)
 		goto end_it;
 	}
 
-	gtk_box_pack_start(GTK_BOX(GTK_DIALOG(popup)->vbox),
+	vbox = gtk_dialog_get_content_area(GTK_DIALOG(popup));
+	gtk_box_pack_start(GTK_BOX(vbox),
 			   label, false, false, 0);
 	if (entry)
-		gtk_box_pack_start(GTK_BOX(GTK_DIALOG(popup)->vbox),
+		gtk_box_pack_start(GTK_BOX(vbox),
 				   entry, true, true, 0);
 	gtk_widget_show_all(popup);
 	response = gtk_dialog_run (GTK_DIALOG(popup));

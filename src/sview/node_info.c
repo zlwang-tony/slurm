@@ -28,7 +28,7 @@
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA.
 \*****************************************************************************/
 
-#include "src/sview/sview.h"
+#include "sview.h"
 
 #define _DEBUG 0
 #define ECLIPSE_RT 0
@@ -686,10 +686,10 @@ static void _display_info_node(List info_list,	popup_info_t *popup_win)
 	}
 need_refresh:
 	if (!spec_info->display_widget) {
-		treeview = create_treeview_2cols_attach_to_table(
-			popup_win->table);
+		treeview = create_treeview_2cols_attach_to_grid(
+			popup_win->grid);
 		spec_info->display_widget =
-			gtk_widget_ref(GTK_WIDGET(treeview));
+			g_object_ref(GTK_WIDGET(treeview));
 	} else {
 		treeview = GTK_TREE_VIEW(spec_info->display_widget);
 		update = 1;
@@ -773,7 +773,7 @@ static void _process_each_node(GtkTreeModel *model, GtkTreePath *path,
 
 
 
-extern void refresh_node(GtkAction *action, gpointer user_data)
+extern void refresh_node(GtkWidget *action, gpointer user_data)
 {
 	popup_info_t *popup_win = (popup_info_t *)user_data;
 	xassert(popup_win);
@@ -998,7 +998,7 @@ extern int update_active_features_node(GtkDialog *dialog, const char *nodelist,
 	int response = 0;
 	int no_dialog = 0;
 	int rc = SLURM_SUCCESS;
-
+	GtkWidget *vbox = NULL;
 
 	if (_DEBUG)
 		g_print("update_active_features_node:global_row_count: %d "
@@ -1015,16 +1015,20 @@ extern int update_active_features_node(GtkDialog *dialog, const char *nodelist,
 				GTK_WINDOW(main_window),
 				GTK_DIALOG_MODAL
 				| GTK_DIALOG_DESTROY_WITH_PARENT,
+				"_Ok",
+				GTK_RESPONSE_OK,
+				"_Cancel",
+				GTK_RESPONSE_CANCEL,
 				NULL));
 		no_dialog = 1;
 	}
 	label = gtk_dialog_add_button(dialog,
-				      GTK_STOCK_YES, GTK_RESPONSE_OK);
+				      "_Yes", GTK_RESPONSE_OK);
 	gtk_window_set_type_hint(GTK_WINDOW(dialog),
 				 GDK_WINDOW_TYPE_HINT_NORMAL);
 	gtk_window_set_default(GTK_WINDOW(dialog), label);
 	gtk_dialog_add_button(dialog,
-			      GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL);
+			      "_Cancel", GTK_RESPONSE_CANCEL);
 
 	slurm_init_update_node_msg(node_msg);
 	node_msg->node_names = xstrdup(nodelist);
@@ -1032,7 +1036,8 @@ extern int update_active_features_node(GtkDialog *dialog, const char *nodelist,
 	snprintf(tmp_char, sizeof(tmp_char),
 		 "Active Features for Node(s) %s?", nodelist);
 	label = gtk_label_new(tmp_char);
-	gtk_box_pack_start(GTK_BOX(dialog->vbox),
+	vbox = gtk_dialog_get_content_area(dialog);
+	gtk_box_pack_start(GTK_BOX(vbox),
 			   label, false, false, 0);
 
 	entry = create_entry();
@@ -1042,7 +1047,7 @@ extern int update_active_features_node(GtkDialog *dialog, const char *nodelist,
 	if (old_features)
 		gtk_entry_set_text(GTK_ENTRY(entry), old_features);
 
-	gtk_box_pack_start(GTK_BOX(dialog->vbox), entry, true, true, 0);
+	gtk_box_pack_start(GTK_BOX(vbox), entry, true, true, 0);
 	gtk_widget_show_all(GTK_WIDGET(dialog));
 
 	response = gtk_dialog_run(dialog);
@@ -1090,7 +1095,7 @@ extern int update_avail_features_node(GtkDialog *dialog, const char *nodelist,
 	int response = 0;
 	int no_dialog = 0;
 	int rc = SLURM_SUCCESS;
-
+	GtkWidget *vbox = NULL;
 
 	if (_DEBUG)
 		g_print("update_avail_features_node:global_row_count: %d "
@@ -1107,16 +1112,20 @@ extern int update_avail_features_node(GtkDialog *dialog, const char *nodelist,
 				GTK_WINDOW(main_window),
 				GTK_DIALOG_MODAL
 				| GTK_DIALOG_DESTROY_WITH_PARENT,
+				"_Ok",
+				GTK_RESPONSE_OK,
+				"_Cancel",
+				GTK_RESPONSE_CANCEL,
 				NULL));
 		no_dialog = 1;
 	}
 	label = gtk_dialog_add_button(dialog,
-				      GTK_STOCK_YES, GTK_RESPONSE_OK);
+				      "_Yes", GTK_RESPONSE_OK);
 	gtk_window_set_type_hint(GTK_WINDOW(dialog),
 				 GDK_WINDOW_TYPE_HINT_NORMAL);
 	gtk_window_set_default(GTK_WINDOW(dialog), label);
 	gtk_dialog_add_button(dialog,
-			      GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL);
+			      "_Cancel", GTK_RESPONSE_CANCEL);
 
 	slurm_init_update_node_msg(node_msg);
 	node_msg->node_names = xstrdup(nodelist);
@@ -1124,7 +1133,8 @@ extern int update_avail_features_node(GtkDialog *dialog, const char *nodelist,
 	snprintf(tmp_char, sizeof(tmp_char),
 		 "Available Features for Node(s) %s?", nodelist);
 	label = gtk_label_new(tmp_char);
-	gtk_box_pack_start(GTK_BOX(dialog->vbox),
+	vbox = gtk_dialog_get_content_area(dialog);
+	gtk_box_pack_start(GTK_BOX(vbox),
 			   label, false, false, 0);
 
 	entry = create_entry();
@@ -1134,7 +1144,7 @@ extern int update_avail_features_node(GtkDialog *dialog, const char *nodelist,
 	if (old_features)
 		gtk_entry_set_text(GTK_ENTRY(entry), old_features);
 
-	gtk_box_pack_start(GTK_BOX(dialog->vbox), entry, true, true, 0);
+	gtk_box_pack_start(GTK_BOX(vbox), entry, true, true, 0);
 	gtk_widget_show_all(GTK_WIDGET(dialog));
 
 	response = gtk_dialog_run(dialog);
@@ -1182,6 +1192,7 @@ extern int update_gres_node(GtkDialog *dialog, const char *nodelist,
 	int response = 0;
 	int no_dialog = 0;
 	int rc = SLURM_SUCCESS;
+	GtkWidget *vbox = NULL;
 
 	if (_DEBUG)
 		g_print("update_gres_node:global_row_count:"
@@ -1198,14 +1209,18 @@ extern int update_gres_node(GtkDialog *dialog, const char *nodelist,
 				GTK_WINDOW(main_window),
 				GTK_DIALOG_MODAL
 				| GTK_DIALOG_DESTROY_WITH_PARENT,
+				"_Ok",
+				GTK_RESPONSE_OK,
+				"_Cancel",
+				GTK_RESPONSE_CANCEL,
 				NULL));
 		no_dialog = 1;
 	}
-	label = gtk_dialog_add_button(dialog, GTK_STOCK_YES, GTK_RESPONSE_OK);
+	label = gtk_dialog_add_button(dialog, "_Yes", GTK_RESPONSE_OK);
 	gtk_window_set_type_hint(GTK_WINDOW(dialog),
 				 GDK_WINDOW_TYPE_HINT_NORMAL);
 	gtk_window_set_default(GTK_WINDOW(dialog), label);
-	gtk_dialog_add_button(dialog, GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL);
+	gtk_dialog_add_button(dialog, "_Cancel", GTK_RESPONSE_CANCEL);
 
 	slurm_init_update_node_msg(node_msg);
 	node_msg->node_names = xstrdup(nodelist);
@@ -1213,7 +1228,8 @@ extern int update_gres_node(GtkDialog *dialog, const char *nodelist,
 	snprintf(tmp_char, sizeof(tmp_char), "Gres for Node(s) %s?", nodelist);
 
 	label = gtk_label_new(tmp_char);
-	gtk_box_pack_start(GTK_BOX(dialog->vbox), label, false, false, 0);
+	vbox = gtk_dialog_get_content_area(dialog);
+	gtk_box_pack_start(GTK_BOX(vbox), label, false, false, 0);
 
 	entry = create_entry();
 	if (!entry)
@@ -1222,7 +1238,7 @@ extern int update_gres_node(GtkDialog *dialog, const char *nodelist,
 	if (old_gres)
 		gtk_entry_set_text(GTK_ENTRY(entry), old_gres);
 
-	gtk_box_pack_start(GTK_BOX(dialog->vbox), entry, true, true, 0);
+	gtk_box_pack_start(GTK_BOX(vbox), entry, true, true, 0);
 	gtk_widget_show_all(GTK_WIDGET(dialog));
 
 	response = gtk_dialog_run(dialog);
@@ -1268,6 +1284,7 @@ extern int update_state_node(GtkDialog *dialog,
 	update_node_msg_t *node_msg = xmalloc(sizeof(update_node_msg_t));
 	GtkWidget *label = NULL;
 	GtkWidget *entry = NULL;
+	GtkWidget *vbox = NULL;
 	int no_dialog = 0;
 
 	if (!dialog) {
@@ -1277,14 +1294,18 @@ extern int update_state_node(GtkDialog *dialog,
 				GTK_WINDOW(main_window),
 				GTK_DIALOG_MODAL
 				| GTK_DIALOG_DESTROY_WITH_PARENT,
+				"_Ok",
+				GTK_RESPONSE_OK,
+				"_Cancel",
+				GTK_RESPONSE_CANCEL,
 				NULL));
 		no_dialog = 1;
 	}
-	label = gtk_dialog_add_button(dialog, GTK_STOCK_YES, GTK_RESPONSE_OK);
+	label = gtk_dialog_add_button(dialog, "_Yes", GTK_RESPONSE_OK);
 	gtk_window_set_type_hint(GTK_WINDOW(dialog),
 				 GDK_WINDOW_TYPE_HINT_NORMAL);
 	gtk_window_set_default(GTK_WINDOW(dialog), label);
-	gtk_dialog_add_button(dialog, GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL);
+	gtk_dialog_add_button(dialog, "_Cancel", GTK_RESPONSE_CANCEL);
 
 	slurm_init_update_node_msg(node_msg);
 	node_msg->node_names = xstrdup(nodelist);
@@ -1340,9 +1361,10 @@ extern int update_state_node(GtkDialog *dialog,
 	if (!label)
 		goto end_it;
 	node_msg->node_state = (uint16_t)state;
-	gtk_box_pack_start(GTK_BOX(dialog->vbox), label, false, false, 0);
+	vbox = gtk_dialog_get_content_area(dialog);
+	gtk_box_pack_start(GTK_BOX(vbox), label, false, false, 0);
 	if (entry)
-		gtk_box_pack_start(GTK_BOX(dialog->vbox), entry, true, true, 0);
+		gtk_box_pack_start(GTK_BOX(vbox), entry, true, true, 0);
 	gtk_widget_show_all(GTK_WIDGET(dialog));
 	i = gtk_dialog_run(dialog);
 	if (i == GTK_RESPONSE_OK) {
@@ -1474,7 +1496,7 @@ no_input:
 	g_mutex_unlock(sview_mutex);
 }
 
-extern void get_info_node(GtkTable *table, display_data_t *display_data)
+extern void get_info_node(GtkGrid *grid, display_data_t *display_data)
 {
 	int error_code = SLURM_SUCCESS;
 	static int view = -1;
@@ -1496,7 +1518,7 @@ extern void get_info_node(GtkTable *table, display_data_t *display_data)
 	set_opts = true;
 
 	/* reset */
-	if (!table && !display_data) {
+	if (!grid && !display_data) {
 		if (display_widget)
 			gtk_widget_destroy(display_widget);
 		display_widget = NULL;
@@ -1505,7 +1527,7 @@ extern void get_info_node(GtkTable *table, display_data_t *display_data)
 
 	if (display_data)
 		local_display_data = display_data;
-	if (!table) {
+	if (!grid) {
 		display_data_node->set_menu = local_display_data->set_menu;
 		goto reset_curs;
 	}
@@ -1531,8 +1553,8 @@ extern void get_info_node(GtkTable *table, display_data_t *display_data)
 		sprintf(error_char, "slurm_load_node: %s",
 			slurm_strerror(slurm_get_errno()));
 		label = gtk_label_new(error_char);
-		display_widget = gtk_widget_ref(label);
-		gtk_table_attach_defaults(table, label, 0, 1, 0, 1);
+		display_widget = g_object_ref(label);
+		gtk_grid_attach(grid, label, 0, 0, 1, 1);
 		gtk_widget_show(label);
 		goto end_it;
 	}
@@ -1584,10 +1606,10 @@ display_it:
 		gtk_tree_selection_set_mode(
 			gtk_tree_view_get_selection(tree_view),
 			GTK_SELECTION_MULTIPLE);
-		display_widget = gtk_widget_ref(GTK_WIDGET(tree_view));
-		gtk_table_attach_defaults(GTK_TABLE(table),
-					  GTK_WIDGET(tree_view),
-					  0, 1, 0, 1);
+		display_widget = g_object_ref(GTK_WIDGET(tree_view));
+		gtk_grid_attach(GTK_GRID(grid),
+				GTK_WIDGET(tree_view),
+				0, 0, 1, 1);
 		/* Since this function sets the model of the tree_view to the
 		 * treestore we don't really care about the return value
 		 * On large clusters, sorting on the node name slows GTK down
@@ -1613,8 +1635,8 @@ end_it:
 	toggled = false;
 	force_refresh = 1;
 reset_curs:
-	if (main_window && main_window->window)
-		gdk_window_set_cursor(main_window->window, NULL);
+	if (main_gdk_win)
+		gdk_window_set_cursor(main_gdk_win, NULL);
 	return;
 
 }
@@ -1663,11 +1685,9 @@ extern void specific_info_node(popup_info_t *popup_win)
 		sprintf(error_char, "slurm_load_node: %s",
 			slurm_strerror(slurm_get_errno()));
 		label = gtk_label_new(error_char);
-		gtk_table_attach_defaults(popup_win->table,
-					  label,
-					  0, 1, 0, 1);
+		gtk_grid_attach(popup_win->grid, label, 0, 0, 1, 1);
 		gtk_widget_show(label);
-		spec_info->display_widget = gtk_widget_ref(label);
+		spec_info->display_widget = g_object_ref(label);
 		return;
 	}
 display_it:
@@ -1689,10 +1709,10 @@ display_it:
 			gtk_tree_view_get_selection(tree_view),
 			GTK_SELECTION_MULTIPLE);
 		spec_info->display_widget =
-			gtk_widget_ref(GTK_WIDGET(tree_view));
-		gtk_table_attach_defaults(popup_win->table,
-					  GTK_WIDGET(tree_view),
-					  0, 1, 0, 1);
+			g_object_ref(GTK_WIDGET(tree_view));
+		gtk_grid_attach(popup_win->grid,
+				GTK_WIDGET(tree_view),
+				0, 0, 1, 1);
 		/* Since this function sets the model of the tree_view to the
 		 * treestore we don't really care about the return value
 		 * On large clusters, sorting on the node name slows GTK down
@@ -1950,9 +1970,7 @@ extern void admin_menu_node_name(char *name, GdkEventButton *event)
 		gtk_menu_shell_append(GTK_MENU_SHELL(menu), menuitem);
 	}
 	gtk_widget_show_all(GTK_WIDGET(menu));
-	gtk_menu_popup(menu, NULL, NULL, NULL, NULL,
-		       event ? event->button : 0,
-		       gdk_event_get_time((GdkEvent*)event));
+	gtk_menu_popup_at_pointer(menu, (GdkEvent*)event);
 }
 
 extern void select_admin_nodes(GtkTreeModel *model,
@@ -2013,6 +2031,10 @@ extern void admin_node_name(char *name, char *old_value, char *type)
 		type,
 		GTK_WINDOW(main_window),
 		GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+		"_Ok",
+		GTK_RESPONSE_OK,
+		"_Cancel",
+		GTK_RESPONSE_CANCEL,
 		NULL);
 	gtk_window_set_type_hint(GTK_WINDOW(popup),
 				 GDK_WINDOW_TYPE_HINT_NORMAL);

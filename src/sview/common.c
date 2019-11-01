@@ -29,7 +29,7 @@
 
 #include "config.h"
 
-#include "src/sview/sview.h"
+#include "sview.h"
 #include "src/common/parse_time.h"
 #include <gdk/gdkkeysyms.h>
 
@@ -329,7 +329,7 @@ static void _editing_started(GtkCellRenderer *cell,
 			     const gchar     *path,
 			     gpointer         data)
 {
-	gdk_threads_leave();
+//	gdk_threads_leave();
 	g_mutex_lock(sview_mutex);
 }
 
@@ -343,12 +343,12 @@ static void *_editing_thr(gpointer arg)
 {
 	int msg_id = 0;
 	sleep(5);
-	gdk_threads_enter();
+//	gdk_threads_enter();
 	msg_id = GPOINTER_TO_INT(arg);
 	gtk_statusbar_remove(GTK_STATUSBAR(main_statusbar),
 			     STATUS_ADMIN_EDIT, msg_id);
 	//gdk_flush();
-	gdk_threads_leave();
+//	gdk_threads_leave();
 	return NULL;
 }
 
@@ -559,6 +559,30 @@ static void _selected_page(GtkMenuItem *menuitem, display_data_t *display_data)
 			_foreach_popup_all, &each);
 	xfree(treedata);
 }
+
+extern void sview_set_alignment(GtkWidget *widget)
+{
+	gtk_widget_set_halign(widget, 0.0);
+	gtk_widget_set_valign(widget, 0.5);
+}
+
+extern GtkWidget *sview_create_gtk_grid(bool homogeneous)
+{
+	GtkWidget *grid = gtk_grid_new();
+
+	gtk_grid_set_row_homogeneous(GTK_GRID(grid), homogeneous);
+	gtk_grid_set_column_homogeneous(GTK_GRID(grid), homogeneous);
+
+	return grid;
+}
+
+extern GtkGrid *sview_get_grid_from_window(GtkScrolledWindow *window)
+{
+	GtkBin *bin = GTK_BIN(&window->container);
+	bin = GTK_BIN(&GTK_VIEWPORT(gtk_bin_get_child(bin))->bin);
+	return GTK_GRID(gtk_bin_get_child(bin));
+}
+
 
 extern char * replspace (char *str)
 {
@@ -890,10 +914,10 @@ extern void make_options_menu(GtkTreeView *tree_view, GtkTreePath *path,
 extern GtkScrolledWindow *create_scrolled_window(void)
 {
 	GtkScrolledWindow *scrolled_window = NULL;
-	GtkWidget *table = NULL;
-	table = gtk_table_new(1, 1, false);
+	GtkWidget *grid = NULL;
+	grid = sview_create_gtk_grid(false);
 
-	gtk_container_set_border_width(GTK_CONTAINER(table), 10);
+	gtk_container_set_border_width(GTK_CONTAINER(grid), 10);
 
 	scrolled_window = GTK_SCROLLED_WINDOW(gtk_scrolled_window_new(
 						      NULL, NULL));
@@ -903,7 +927,7 @@ extern GtkScrolledWindow *create_scrolled_window(void)
 				       GTK_POLICY_AUTOMATIC,
 				       GTK_POLICY_AUTOMATIC);
 
-	gtk_scrolled_window_add_with_viewport(scrolled_window, table);
+	gtk_container_add(GTK_CONTAINER(scrolled_window), grid);
 
 	return scrolled_window;
 }
@@ -923,47 +947,53 @@ extern void create_page(GtkNotebook *notebook, display_data_t *display_data)
 	GtkWidget *event_box = gtk_event_box_new();
 	GtkWidget *label = gtk_label_new(display_data->name);
 	GtkWidget *close_button = gtk_event_box_new();
-	GtkWidget *table;
+	GtkWidget *grid;
 	GtkWidget *image = NULL;
+	char *image_name;
 	int err;
 
+	gtk_widget_set_hexpand(GTK_WIDGET(scrolled_window), TRUE);
+	gtk_widget_set_vexpand(GTK_WIDGET(scrolled_window), TRUE);
+
 	if (display_data->id == TAB_PAGE) {
-		table = gtk_table_new(PAGE_CNT, 3, false);
-		image = gtk_image_new_from_stock(
-			GTK_STOCK_ADD, GTK_ICON_SIZE_SMALL_TOOLBAR);
+		image_name = "list-add";
 	} else {
-		table = gtk_table_new(1, 3, false);
-		image = gtk_image_new_from_stock(
-			GTK_STOCK_DIALOG_ERROR, GTK_ICON_SIZE_SMALL_TOOLBAR);
+		image_name = "window-close";
 		g_signal_connect(G_OBJECT(close_button), "button-press-event",
 				 G_CALLBACK(close_tab),
 				 display_data);
 	}
+
+	grid = sview_create_gtk_grid(false);
+	image = gtk_image_new_from_icon_name(
+		image_name, GTK_ICON_SIZE_SMALL_TOOLBAR);
 
 	gtk_container_add(GTK_CONTAINER(close_button), image);
 	gtk_widget_set_size_request(close_button, 10, 10);
 
 	//gtk_event_box_set_above_child(GTK_EVENT_BOX(close_button), false);
 
+	gtk_widget_set_hexpand(label, TRUE);
 	gtk_container_add(GTK_CONTAINER(event_box), label);
 	gtk_event_box_set_above_child(GTK_EVENT_BOX(event_box), false);
 	g_signal_connect(G_OBJECT(event_box), "button-press-event",
 			 G_CALLBACK(tab_pressed),
 			 display_data);
 
-	gtk_table_set_homogeneous(GTK_TABLE(table), false);
-	gtk_table_set_col_spacings(GTK_TABLE(table), 5);
-	gtk_container_set_border_width(GTK_CONTAINER(table), 1);
+	gtk_grid_set_row_homogeneous(GTK_GRID(grid), false);
+	gtk_grid_set_column_homogeneous(GTK_GRID(grid), false);
+	gtk_container_set_border_width(GTK_CONTAINER(grid), 1);
 
-	gtk_table_attach_defaults(GTK_TABLE(table), event_box, 0, 1, 0, 1);
-	gtk_table_attach_defaults(GTK_TABLE(table), close_button, 2, 3, 0, 1);
-	gtk_container_set_focus_child(GTK_CONTAINER(table), label);
+	gtk_grid_attach(GTK_GRID(grid), event_box, 0, 0, 1, 1);
+	gtk_grid_attach(GTK_GRID(grid), close_button, 1, 0, 1, 1);
 
-	gtk_widget_show_all(table);
+	gtk_container_set_focus_child(GTK_CONTAINER(grid), label);
+
+	gtk_widget_show_all(grid);
 	//(display_data->set_fields)(GTK_MENU(menu));
 	if ((err = gtk_notebook_append_page(GTK_NOTEBOOK(notebook),
 					    GTK_WIDGET(scrolled_window),
-					    table)) == -1) {
+					    grid)) == -1) {
 		g_error("Couldn't add page to notebook\n");
 	}
 
@@ -977,10 +1007,11 @@ extern GtkTreeView *create_treeview(display_data_t *local, List *button_list)
 	GtkTreeView *tree_view = GTK_TREE_VIEW(gtk_tree_view_new());
 	local->user_data = NULL;
 
+	gtk_widget_set_hexpand(GTK_WIDGET(tree_view), TRUE);
+	gtk_widget_set_vexpand(GTK_WIDGET(tree_view), TRUE);
+
 	signal_params->display_data = local;
 	signal_params->button_list = button_list;
-	if (working_sview_config.ruled_treeview)
-		gtk_tree_view_set_rules_hint (tree_view, true);
 
 	g_signal_connect(G_OBJECT(tree_view), "button-press-event",
 			 G_CALLBACK(row_clicked),
@@ -1000,21 +1031,16 @@ extern GtkTreeView *create_treeview(display_data_t *local, List *button_list)
 
 }
 
-extern GtkTreeView *create_treeview_2cols_attach_to_table(GtkTable *table)
+extern GtkTreeView *create_treeview_2cols_attach_to_grid(GtkGrid *grid)
 {
 	GtkTreeView *tree_view = GTK_TREE_VIEW(gtk_tree_view_new());
 	GtkTreeStore *treestore =
-		gtk_tree_store_new(3, GTK_TYPE_STRING,
-				   GTK_TYPE_STRING, GTK_TYPE_STRING);
+		gtk_tree_store_new(3, G_TYPE_STRING,
+				   G_TYPE_STRING, G_TYPE_STRING);
 	GtkTreeViewColumn *col = gtk_tree_view_column_new();
 	GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
 
-	if (working_sview_config.ruled_treeview)
-		gtk_tree_view_set_rules_hint (tree_view, true);
-
-	gtk_table_attach_defaults(table,
-				  GTK_WIDGET(tree_view),
-				  0, 1, 0, 1);
+	gtk_grid_attach(grid, GTK_WIDGET(tree_view), 0, 0, 1, 1);
 
 	gtk_tree_view_set_model(tree_view, GTK_TREE_MODEL(treestore));
 
@@ -1161,9 +1187,7 @@ extern gboolean right_button_pressed(GtkTreeView *tree_view,
 
 	(display_data->set_menu)(tree_view, menu, path, type);
 	gtk_widget_show_all(GTK_WIDGET(menu));
-	gtk_menu_popup(menu, NULL, NULL, NULL, NULL,
-		       event ? event->button : 0,
-		       gdk_event_get_time((GdkEvent*)event));
+	gtk_menu_popup_at_pointer(menu, (GdkEvent*)event);
 	return true;
 }
 
@@ -1237,10 +1261,10 @@ extern gboolean key_pressed(GtkTreeView *tree_view,
 	control_key_in_effect = false;
 	enter_key_in_effect = false;
 
-	if ((event->keyval == GDK_Control_L) ||
-	    (event->keyval == GDK_Control_R))
+	if ((event->keyval == GDK_KEY_Control_L) ||
+	    (event->keyval == GDK_KEY_Control_R))
 		control_key_in_effect = true;
-	else if (event->keyval == GDK_Return) {
+	else if (event->keyval == GDK_KEY_Return) {
 		each_t each;
 		GtkTreeSelection *selection = NULL;
 
@@ -1275,9 +1299,9 @@ extern gboolean key_released(GtkTreeView *tree_view,
 	GtkTreeViewColumn *column;
 	GtkTreeSelection *selection = NULL;
 
-	if ((event->keyval != GDK_Up) &&
-	    (event->keyval != GDK_Down) &&
-	    (event->keyval != GDK_Return))
+	if ((event->keyval != GDK_KEY_Up) &&
+	    (event->keyval != GDK_KEY_Down) &&
+	    (event->keyval != GDK_KEY_Return))
 		return true;
 
 	gtk_tree_view_get_cursor(GTK_TREE_VIEW(tree_view), &path, &column);
@@ -1413,10 +1437,8 @@ extern gboolean row_clicked(GtkTreeView *tree_view, GdkEventButton *event,
 extern popup_info_t *create_popup_info(int type, int dest_type, char *title)
 {
 	GtkScrolledWindow *window = NULL, *grid_window = NULL;
-	GtkBin *bin = NULL;
-	GtkViewport *view = NULL;
 	GtkWidget *label = NULL;
-	GtkWidget *table = NULL;
+	GtkWidget *grid = NULL;
 	GtkWidget *close_btn = NULL;
 	popup_info_t *popup_win = xmalloc(sizeof(popup_info_t));
 //	int i=0;
@@ -1437,11 +1459,11 @@ extern popup_info_t *create_popup_info(int type, int dest_type, char *title)
 		title,
 		GTK_WINDOW(main_window),
 		GTK_DIALOG_DESTROY_WITH_PARENT,
-		GTK_STOCK_REFRESH,
+		"_Refresh",
 		GTK_RESPONSE_OK,
 		NULL);
 	close_btn = gtk_dialog_add_button(GTK_DIALOG(popup_win->popup),
-					  GTK_STOCK_CLOSE, GTK_RESPONSE_CLOSE);
+					  "_Close", GTK_RESPONSE_CLOSE);
 	gtk_window_set_type_hint(GTK_WINDOW(popup_win->popup),
 				 GDK_WINDOW_TYPE_HINT_NORMAL);
 	gtk_window_set_focus(GTK_WINDOW(popup_win->popup), close_btn);
@@ -1483,36 +1505,37 @@ extern popup_info_t *create_popup_info(int type, int dest_type, char *title)
 		GTK_EVENT_BOX(popup_win->event_box),
 		false);
 
-	gtk_box_pack_start(GTK_BOX(GTK_DIALOG(popup_win->popup)->vbox),
-			   popup_win->event_box, false, false, 0);
+	gtk_box_pack_start(
+		GTK_BOX(gtk_dialog_get_content_area(
+				GTK_DIALOG(popup_win->popup))),
+		popup_win->event_box, false, false, 0);
 
 	grid_window = create_scrolled_window();
 	gtk_scrolled_window_set_policy(grid_window,
 				       GTK_POLICY_NEVER,
 				       GTK_POLICY_AUTOMATIC);
-	bin = GTK_BIN(&grid_window->container);
-	view = GTK_VIEWPORT(bin->child);
-	bin = GTK_BIN(&view->bin);
-	popup_win->grid_table = GTK_TABLE(bin->child);
+	popup_win->grid_grid = sview_get_grid_from_window(grid_window);
 	popup_win->grid_button_list = NULL;
 
-	table = gtk_table_new(1, 2, false);
+	grid = sview_create_gtk_grid(false);
 
-	gtk_table_attach(GTK_TABLE(table), GTK_WIDGET(grid_window), 0, 1, 0, 1,
-			 GTK_SHRINK, GTK_EXPAND | GTK_FILL,
-			 0, 0);
+	gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(grid_window), 0, 0, 1, 1);
+	/* gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(grid_window), 0, 1, 0, 1, */
+	/* 		 GTK_SHRINK, GTK_EXPAND | GTK_FILL, */
+	/* 		 0, 0); */
 
 	window = create_scrolled_window();
-	bin = GTK_BIN(&window->container);
-	view = GTK_VIEWPORT(bin->child);
-	bin = GTK_BIN(&view->bin);
-	popup_win->table = GTK_TABLE(bin->child);
+	popup_win->grid = sview_get_grid_from_window(window);
 
-	gtk_table_attach_defaults(GTK_TABLE(table), GTK_WIDGET(window),
-				  1, 2, 0, 1);
+	gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(window),
+			1, 0, 1, 1);
+	/* gtk_grid_attach_defaults(GTK_GRID(grid), GTK_WIDGET(window), */
+	/* 			  1, 2, 0, 1); */
 
-	gtk_box_pack_start(GTK_BOX(GTK_DIALOG(popup_win->popup)->vbox),
-			   table, true, true, 0);
+	gtk_box_pack_start(
+		GTK_BOX(gtk_dialog_get_content_area(
+				GTK_DIALOG(popup_win->popup))),
+		grid, true, true, 0);
 
 	g_signal_connect(G_OBJECT(popup_win->popup), "delete_event",
 			 G_CALLBACK(delete_popup),
@@ -1558,8 +1581,7 @@ extern void redo_popup(GtkWidget *widget, GdkEventButton *event,
 						    POPUP_CLICKED);
 
 		gtk_widget_show_all(GTK_WIDGET(menu));
-		gtk_menu_popup(menu, NULL, NULL, NULL, NULL, event->button,
-			       gdk_event_get_time((GdkEvent*)event));
+		gtk_menu_popup_at_pointer(menu, (GdkEvent*)event);
 	}
 }
 
@@ -1602,13 +1624,13 @@ extern void destroy_popup_info(void *arg)
 		/* these are all children of each other so must
 		   be freed in this order */
 		FREE_NULL_LIST(popup_win->grid_button_list);
-		if (popup_win->table) {
-			gtk_widget_destroy(GTK_WIDGET(popup_win->table));
-			popup_win->table = NULL;
+		if (popup_win->grid) {
+			gtk_widget_destroy(GTK_WIDGET(popup_win->grid));
+			popup_win->grid = NULL;
 		}
-		if (popup_win->grid_table) {
-			gtk_widget_destroy(GTK_WIDGET(popup_win->grid_table));
-			popup_win->grid_table = NULL;
+		if (popup_win->grid_grid) {
+			gtk_widget_destroy(GTK_WIDGET(popup_win->grid_grid));
+			popup_win->grid_grid = NULL;
 		}
 		if (popup_win->event_box) {
 			gtk_widget_destroy(popup_win->event_box);
@@ -1706,9 +1728,9 @@ extern void *popup_thr(popup_info_t *popup_win)
 	popup_win->running = &running;
 	/* when popup is killed running will be set to 0 */
 	while (running) {
-		gdk_threads_enter();
+//		gdk_threads_enter();
 		(specifc_info)(popup_win);
-		gdk_threads_leave();
+//		gdk_threads_leave();
 		sleep(working_sview_config.refresh_delay);
 	}
 	return NULL;
@@ -1812,16 +1834,16 @@ extern char *get_reason(void)
 {
 	char *reason_str = NULL;
 	int len = 0;
-	GtkWidget *table = gtk_table_new(1, 2, false);
+	GtkWidget *grid = sview_create_gtk_grid(false);
 	GtkWidget *label = gtk_label_new("Reason ");
 	GtkWidget *entry = gtk_entry_new();
 	GtkWidget *popup = gtk_dialog_new_with_buttons(
 		"State change reason",
 		GTK_WINDOW(main_window),
 		GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-		GTK_STOCK_OK,
+		"_Ok",
 		GTK_RESPONSE_OK,
-		GTK_STOCK_CANCEL,
+		"_Cancel",
 		GTK_RESPONSE_CANCEL,
 		NULL);
 	int response = 0;
@@ -1832,13 +1854,14 @@ extern char *get_reason(void)
 	gtk_window_set_type_hint(GTK_WINDOW(popup),
 				 GDK_WINDOW_TYPE_HINT_NORMAL);
 
-	gtk_container_set_border_width(GTK_CONTAINER(table), 10);
+	gtk_container_set_border_width(GTK_CONTAINER(grid), 10);
 
-	gtk_box_pack_start(GTK_BOX(GTK_DIALOG(popup)->vbox),
-			   table, false, false, 0);
+	gtk_box_pack_start(
+		GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(popup))),
+		grid, false, false, 0);
 
-	gtk_table_attach_defaults(GTK_TABLE(table), label, 0, 1, 0, 1);
-	gtk_table_attach_defaults(GTK_TABLE(table), entry, 1, 2, 0, 1);
+	gtk_grid_attach(GTK_GRID(grid), label, 0, 0, 1, 1);
+	gtk_grid_attach(GTK_GRID(grid), entry, 1, 0, 1, 1);
 
 	gtk_widget_show_all(popup);
 	response = gtk_dialog_run (GTK_DIALOG(popup));
@@ -1869,7 +1892,7 @@ end_it:
 	return reason_str;
 }
 
-extern void display_admin_edit(GtkTable *table, void *type_msg, int *row,
+extern void display_admin_edit(GtkGrid *grid, void *type_msg, int *row,
 			       GtkTreeModel *model, GtkTreeIter *iter,
 			       display_data_t *display_data,
 			       GCallback changed_callback,
@@ -1941,13 +1964,17 @@ extern void display_admin_edit(GtkTable *table, void *type_msg, int *row,
 		return;
 	label = gtk_label_new(display_data->name);
 	/* left justify */
-	gtk_misc_set_alignment(GTK_MISC(label), 0.0, 0.5);
-	gtk_table_attach(table, label, 0, 1, *row, (*row)+1,
-			 GTK_FILL | GTK_EXPAND, GTK_SHRINK,
-			 0, 0);
-	gtk_table_attach(table, entry, 1, 2, *row, (*row)+1,
-			 GTK_FILL, GTK_SHRINK,
-			 0, 0);
+	/* gtk_misc_set_alignment(GTK_MISC(label), 0.0, 0.5); */
+	sview_set_alignment(label);
+
+	gtk_grid_attach(grid, label, 0, *row, 1, 1);
+	gtk_grid_attach(grid, entry, 1, *row, 1, 1);
+	/* gtk_grid_attach(grid, label, 0, 1, *row, (*row)+1, */
+	/* 		 GTK_FILL | GTK_EXPAND, GTK_SHRINK, */
+	/* 		 0, 0); */
+	/* gtk_grid_attach(grid, entry, 1, 2, *row, (*row)+1, */
+	/* 		 GTK_FILL, GTK_SHRINK, */
+	/* 		 0, 0); */
 	(*row)++;
 }
 
@@ -2067,50 +2094,97 @@ found:
 	return;
 }
 
-extern void sview_widget_modify_bg(GtkWidget *widget, GtkStateType state,
-				   const GdkColor color)
+extern void sview_widget_modify_bg(GtkWidget *widget, char *color_char)
 {
-	gtk_widget_modify_bg(widget, state, &color);
+	GtkCssProvider *cssp;
+	char *color_str;
+
+	if (!color_char || !GTK_IS_BUTTON(widget))
+		return;
+
+	cssp = gtk_css_provider_new();
+
+	color_str = xstrdup_printf("GtkButton {background-color: %s;}",
+				   color_char);
+
+
+	gtk_css_provider_load_from_data(GTK_CSS_PROVIDER(cssp),
+					color_str, -1, NULL);
+	gtk_style_context_add_provider(gtk_widget_get_style_context(widget),
+				       GTK_STYLE_PROVIDER(cssp),
+				       GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+	g_object_unref(cssp);
+	xfree(color_str);
+
+	/*FIXME!!!!*/
+	/* gtk_widget_override_background_color(widget, state, &color); */
+
+	/* GdkPixbuf *pixbuf = NULL; */
+	/* char *color_char2; */
+	/* uint32_t color; */
+
+	/* if (!color_char || !GTK_IS_CELL_RENDERER(widget)) */
+	/* 	return; */
+
+	/* color_char2 = color_char+1; */
+	/* color = strtoul(color_char2, (char **)&color_char2, 16); */
+
+	/* g_object_get(GTK_CELL_RENDERER(widget), "pixbuf", &pixbuf, NULL); */
+	/* if (!pixbuf) { */
+	/* 	pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, false, */
+	/* 				8, */
+	/* 				working_sview_config.button_size, */
+	/* 				working_sview_config.button_size); */
+	/* 	g_object_set(GTK_CELL_RENDERER(widget), "pixbuf", pixbuf, NULL); */
+
+	/* 	/\* we need to shift over 2 spots for the alpha *\/ */
+	/* 	gdk_pixbuf_fill(pixbuf, color << 8); */
+
+	/* 	g_object_unref(pixbuf); */
+	/* } */
+
+	/* /\* we need to shift over 2 spots for the alpha *\/ */
+	/* gdk_pixbuf_fill(pixbuf, color << 8); */
 }
 
 extern void sview_radio_action_set_current_value(GtkRadioAction *action,
 						 gint current_value)
 {
-#ifdef GTK2_USE_RADIO_SET
-	gtk_radio_action_set_current_value(action, current_value);
-#else
-	GSList *slist, *group;
-	int i=0;
-	/* gtk_radio_action_set_current_value wasn't added to
-	   GTK until 2.10, it turns out this is what is required to
-	   set the correct value.
-	*/
-	g_return_if_fail(GTK_IS_RADIO_ACTION(action));
+/* #ifdef GTK2_USE_RADIO_SET */
+/* 	gtk_radio_action_set_current_value(action, current_value); */
+/* #else */
+/* 	GSList *slist, *group; */
+/* 	int i=0; */
+/* 	/\* gtk_radio_action_set_current_value wasn't added to */
+/* 	   GTK until 2.10, it turns out this is what is required to */
+/* 	   set the correct value. */
+/* 	*\/ */
+/* 	g_return_if_fail(GTK_IS_RADIO_ACTION(action)); */
 
-	if ((group = gtk_radio_action_get_group(action))) {
-		/* for some reason groups are set backwards like a
-		   stack, g_slist_reverse will fix this but takes twice
-		   as long so just figure out the length, they add 1
-		   to it sense 0 isn't a number and then subtract the
-		   value to get the augmented in the stack.
-		*/
-		current_value = g_slist_length(group) - 1 - current_value;
-		if (current_value < 0) {
-			g_warning("Radio group does not contain an action "
-				  "with value '%d'\n", current_value);
-			return;
-		}
+/* 	if ((group = gtk_radio_action_get_group(action))) { */
+/* 		/\* for some reason groups are set backwards like a */
+/* 		   stack, g_slist_reverse will fix this but takes twice */
+/* 		   as long so just figure out the length, they add 1 */
+/* 		   to it sense 0 isn't a number and then subtract the */
+/* 		   value to get the augmented in the stack. */
+/* 		*\/ */
+/* 		current_value = g_slist_length(group) - 1 - current_value; */
+/* 		if (current_value < 0) { */
+/* 			g_warning("Radio group does not contain an action " */
+/* 				  "with value '%d'\n", current_value); */
+/* 			return; */
+/* 		} */
 
-		for (slist = group; slist; slist = slist->next) {
-			if (i == current_value) {
-				gtk_toggle_action_set_active(
-					GTK_TOGGLE_ACTION(slist->data), true);
-				return;
-			}
-			i++;
-		}
-	}
-#endif
+/* 		for (slist = group; slist; slist = slist->next) { */
+/* 			if (i == current_value) { */
+/* 				gtk_toggle_action_set_active( */
+/* 					GTK_TOGGLE_ACTION(slist->data), true); */
+/* 				return; */
+/* 			} */
+/* 			i++; */
+/* 		} */
+/* 	} */
+/* #endif */
 }
 
 extern char *page_to_str(int page)

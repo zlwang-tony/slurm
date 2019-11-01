@@ -354,7 +354,7 @@ static gboolean _admin_focus_out_defaults(GtkEntry *entry,
 	return false;
 }
 
-static void _local_display_admin_edit(GtkTable *table,
+static void _local_display_admin_edit(GtkGrid *grid,
 				      sview_config_t *sview_config, int *row,
 				      display_data_t *display_data)
 {
@@ -440,12 +440,14 @@ static void _local_display_admin_edit(GtkTable *table,
 		case SORTID_PAGE_VISIBLE:
 			label = gtk_label_new(display_data->name);
 			/* left justify */
-			gtk_misc_set_alignment(GTK_MISC(label),0.0,0.5);
+			/* gtk_misc_set_alignment(GTK_MISC(label),0.0,0.5); */
+			sview_set_alignment(label);
 
-			gtk_table_attach(table, label, 0, 1,
-					 *row, (*row)+1,
-					 GTK_FILL | GTK_EXPAND,
-					 GTK_SHRINK, 0, 0);
+			gtk_grid_attach(grid, label, 0, *row, 1, 1);
+			/* gtk_grid_attach(grid, label, 0, 1, */
+			/* 		 *row, (*row)+1, */
+			/* 		 GTK_FILL | GTK_EXPAND, */
+			/* 		 GTK_SHRINK, 0, 0); */
 			for(i=0; i<PAGE_CNT; i++) {
 				if (main_display_data[i].id == -1)
 					break;
@@ -464,10 +466,11 @@ static void _local_display_admin_edit(GtkTable *table,
 					G_CALLBACK(_admin_focus_toggle),
 					&sview_config->page_visible[i]);
 
-				gtk_table_attach(table, entry, 1, 2,
-						 *row, (*row)+1,
-						 GTK_FILL, GTK_SHRINK,
-						 0, 0);
+				gtk_grid_attach(grid, entry, 1, *row, 1, 1);
+				/* gtk_grid_attach(grid, entry, 1, 2, */
+				/* 		 *row, (*row)+1, */
+				/* 		 GTK_FILL, GTK_SHRINK, */
+				/* 		 0, 0); */
 				(*row)++;
 			}
 			break;
@@ -479,14 +482,17 @@ static void _local_display_admin_edit(GtkTable *table,
 		return;
 	label = gtk_label_new(display_data->name);
 	/* left justify */
-	gtk_misc_set_alignment(GTK_MISC(label),0.0,0.5);
+	/* gtk_misc_set_alignment(GTK_MISC(label),0.0,0.5); */
+	sview_set_alignment(label);
 
-	gtk_table_attach(table, label, 0, 1, *row, (*row)+1,
-			 GTK_FILL | GTK_EXPAND, GTK_SHRINK,
-			 0, 0);
-	gtk_table_attach(table, entry, 1, 2, *row, (*row)+1,
-			 GTK_FILL, GTK_SHRINK,
-			 0, 0);
+	gtk_grid_attach(grid, label, 0, *row, 1, 1);
+	gtk_grid_attach(grid, entry, 1, *row, 1, 1);
+	/* gtk_grid_attach(grid, label, 0, 1, *row, (*row)+1, */
+	/* 		 GTK_FILL | GTK_EXPAND, GTK_SHRINK, */
+	/* 		 0, 0); */
+	/* gtk_grid_attach(grid, entry, 1, 2, *row, (*row)+1, */
+	/* 		 GTK_FILL, GTK_SHRINK, */
+	/* 		 0, 0); */
 	(*row)++;
 }
 
@@ -1025,12 +1031,11 @@ extern int configure_defaults(void)
 		"Sview Defaults",
 		GTK_WINDOW(main_window),
 		GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+		"_Ok", GTK_RESPONSE_OK,
+		"_Cancel", GTK_RESPONSE_CANCEL,
 		NULL);
-	GtkWidget *label = gtk_dialog_add_button(GTK_DIALOG(popup),
-						 GTK_STOCK_OK, GTK_RESPONSE_OK);
-	GtkBin *bin = NULL;
-	GtkViewport *view = NULL;
-	GtkTable *table = NULL;
+	GtkWidget *label = NULL;
+	GtkGrid *grid = NULL;
 	int i = 0, row = 0;
 	char tmp_char[100];
 	char *tmp_char_ptr;
@@ -1046,9 +1051,6 @@ extern int configure_defaults(void)
 	memcpy(&tmp_config, &default_sview_config, sizeof(sview_config_t));
 	gtk_window_set_type_hint(GTK_WINDOW(popup),
 				 GDK_WINDOW_TYPE_HINT_NORMAL);
-	gtk_window_set_default(GTK_WINDOW(popup), label);
-	gtk_dialog_add_button(GTK_DIALOG(popup),
-			      GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL);
 
 	/*
 	  for(i=0;; i++) {
@@ -1070,13 +1072,10 @@ extern int configure_defaults(void)
 	gtk_scrolled_window_set_policy(window,
 				       GTK_POLICY_NEVER,
 				       GTK_POLICY_AUTOMATIC);
-	bin = GTK_BIN(&window->container);
-	view = GTK_VIEWPORT(bin->child);
-	bin = GTK_BIN(&view->bin);
-	table = GTK_TABLE(bin->child);
-	gtk_table_resize(table, SORTID_CNT, 2);
+	grid = sview_get_grid_from_window(window);
 
-	gtk_table_set_homogeneous(table, false);
+	gtk_grid_set_row_homogeneous(grid, false);
+	gtk_grid_set_column_homogeneous(grid, false);
 
 	for (i = 0; i < SORTID_CNT; i++) {
 		while (display_data++) {
@@ -1088,19 +1087,20 @@ extern int configure_defaults(void)
 				continue;
 
 			_local_display_admin_edit(
-				table, &tmp_config, &row,
+				grid, &tmp_config, &row,
 				display_data);
 			break;
 		}
 		display_data = display_data_defaults;
 	}
-	gtk_table_resize(table, row, 2);
 
-	gtk_box_pack_start(GTK_BOX(GTK_DIALOG(popup)->vbox),
-			   label, false, false, 0);
+	gtk_box_pack_start(
+		GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(popup))),
+		label, false, false, 0);
 	if (window)
-		gtk_box_pack_start(GTK_BOX(GTK_DIALOG(popup)->vbox),
-				   GTK_WIDGET(window), true, true, 0);
+		gtk_box_pack_start(
+			GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(popup))),
+			GTK_WIDGET(window), true, true, 0);
 	gtk_widget_show_all(popup);
 	response = gtk_dialog_run (GTK_DIALOG(popup));
 	if (response == GTK_RESPONSE_OK) {
@@ -1113,11 +1113,11 @@ extern int configure_defaults(void)
 				"No change detected.");
 		else {
 			int action = 0;
-			gdk_window_set_cursor(main_window->window,
+			gdk_window_set_cursor(main_gdk_win,
 					      in_process_cursor);
 			if (tmp_config.ruled_treeview
 			    != working_sview_config.ruled_treeview) {
-				/* get rid of each existing table */
+				/* get rid of each existing grid */
 				cluster_change_resv();
 				cluster_change_part();
 				cluster_change_job();
@@ -1158,22 +1158,22 @@ extern int configure_defaults(void)
 			       sizeof(sview_config_t));
 
 			/* set the current display to the default */
-			gtk_toggle_action_set_active(
-				default_sview_config.action_admin,
-				working_sview_config.admin_mode);
-			gtk_toggle_action_set_active(
-				default_sview_config.action_ruled,
-				working_sview_config.ruled_treeview);
-			gtk_toggle_action_set_active(
-				default_sview_config.action_grid,
-				working_sview_config.show_grid);
-			gtk_toggle_action_set_active(
-				default_sview_config.action_hidden,
-				working_sview_config.show_hidden);
-			apply_hidden_change = true;
-			gtk_toggle_action_set_active(
-				default_sview_config.action_page_opts,
-				working_sview_config.save_page_opts);
+			/* gtk_toggle_action_set_active( */
+			/* 	default_sview_config.action_admin, */
+			/* 	working_sview_config.admin_mode); */
+			/* gtk_toggle_action_set_active( */
+			/* 	default_sview_config.action_ruled, */
+			/* 	working_sview_config.ruled_treeview); */
+			/* gtk_toggle_action_set_active( */
+			/* 	default_sview_config.action_grid, */
+			/* 	working_sview_config.show_grid); */
+			/* gtk_toggle_action_set_active( */
+			/* 	default_sview_config.action_hidden, */
+			/* 	working_sview_config.show_hidden); */
+			/* apply_hidden_change = true; */
+			/* gtk_toggle_action_set_active( */
+			/* 	default_sview_config.action_page_opts, */
+			/* 	working_sview_config.save_page_opts); */
 #ifdef GTK2_USE_RADIO_SET
 			/* Since this value isn't a simple 0->n we
 			   need to translate if we don't have the
@@ -1202,7 +1202,7 @@ extern int configure_defaults(void)
 
 				toggle_tab_visiblity(NULL, main_display_data+i);
 			}
-			get_system_stats(main_grid_table);
+			get_system_stats(main_grid_grid);
 			/******************************************/
 			save_defaults(false);
 		}
@@ -1215,8 +1215,8 @@ extern int configure_defaults(void)
 
 	gtk_widget_destroy(popup);
 
-	if (main_window && main_window->window)
-		gdk_window_set_cursor(main_window->window, NULL);
+	if (main_gdk_win)
+		gdk_window_set_cursor(main_gdk_win, NULL);
 
 	return rc;
 }
