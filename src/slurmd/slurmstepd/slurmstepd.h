@@ -64,8 +64,6 @@ typedef struct {
 
 extern step_complete_t step_complete;
 
-extern slurmd_conf_t *conf;
-
 extern int stepd_cleanup(slurm_msg_t *msg, stepd_step_rec_t *job,
 			 slurm_addr_t *cli, slurm_addr_t *self,
 			 int rc, bool only_mem);

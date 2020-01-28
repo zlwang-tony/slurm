@@ -84,7 +84,6 @@ bool     initialized = false;
 uint16_t procs, boards, sockets, cores, threads=1;
 uint16_t block_map_size;
 uint16_t *block_map, *block_map_inv;
-extern slurmd_conf_t *conf;
 
 /*
  * get_procs - Return the count of procs on this system

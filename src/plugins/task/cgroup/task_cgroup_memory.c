@@ -57,8 +57,6 @@
 #include <sys/eventfd.h>
 #endif
 
-extern slurmd_conf_t *conf;
-
 static char user_cgroup_path[PATH_MAX];
 static char job_cgroup_path[PATH_MAX];
 static char jobstep_cgroup_path[PATH_MAX];
