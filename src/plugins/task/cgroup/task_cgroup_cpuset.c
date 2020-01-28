@@ -332,7 +332,7 @@ static int _get_sched_cpuset(hwloc_topology_t topology,
 	}
 
 	if (job->cpu_bind_type & CPU_BIND_RANK) {
-		threads = MAX(conf->threads, 1);
+		threads = MAX(slurmd_conf->threads, 1);
 		CPU_SET(job->envtp->localid % (job->cpus*threads), mask);
 		return true;
 	}
@@ -542,7 +542,7 @@ static int _task_cgroup_cpuset_dist_cyclic(
 	bool hwloc_success = true;
 
 	/*
-	 * We can't trust the slurmd_conf_t *conf here as we need actual
+	 * We can't trust the slurmd_conf_t *slurmd_conf here as we need actual
 	 * hardware instead of whatever is possibly configured.  So we need to
 	 * look it up again.
 	 */
@@ -1356,8 +1356,8 @@ extern int task_cgroup_cpuset_set_task_affinity(stepd_step_rec_t *job)
 	/* Allocate and initialize hwloc objects */
 	hwloc_topology_init(&topology);
 
-	xassert(conf->hwloc_xml);
-	xcpuinfo_hwloc_topo_load(&topology, conf->hwloc_xml, false);
+	xassert(slurmd_conf->hwloc_xml);
+	xcpuinfo_hwloc_topo_load(&topology, slurmd_conf->hwloc_xml, false);
 
 	cpuset = hwloc_bitmap_alloc();
 #if HWLOC_API_VERSION >= 0x00020000
@@ -1373,7 +1373,7 @@ extern int task_cgroup_cpuset_set_task_affinity(stepd_step_rec_t *job)
 		jnpus = jntasks * job->cpus_per_task;
 
 	bind_type = job->cpu_bind_type;
-	if ((conf->task_plugin_param & CPU_BIND_VERBOSE) ||
+	if ((slurmd_conf->task_plugin_param & CPU_BIND_VERBOSE) ||
 	    (bind_type & CPU_BIND_VERBOSE))
 		bind_verbose = 1 ;
 

@@ -394,7 +394,7 @@ mgr_launch_batch_job_setup(batch_job_launch_msg_t *msg, slurm_addr_t *cli)
 	if (!(job = batch_stepd_step_rec_create(msg))) {
 		xstrfmtcat(err_msg,
 			   "batch_stepd_step_rec_create() failed for job %u.%u on %s: %s",
-			   msg->job_id, msg->step_id, conf->hostname,
+			   msg->job_id, msg->step_id, slurmd_conf->hostname,
 			   slurm_strerror(errno));
 		(void) log_ctld(LOG_LEVEL_ERROR, err_msg);
 		error("%s", err_msg);
@@ -413,7 +413,7 @@ mgr_launch_batch_job_setup(batch_job_launch_msg_t *msg, slurm_addr_t *cli)
 	}
 
 	/* this is the new way of setting environment variables */
-	env_array_for_batch_job(&job->env, msg, conf->node_name);
+	env_array_for_batch_job(&job->env, msg, slurmd_conf->node_name);
 
 	/* this is the old way of setting environment variables (but
 	 * needed) */
@@ -425,7 +425,7 @@ mgr_launch_batch_job_setup(batch_job_launch_msg_t *msg, slurm_addr_t *cli)
 cleanup:
 	xstrfmtcat(err_msg,
 		   "batch script setup failed for job %u.%u on %s: %s",
-		   msg->job_id, msg->step_id, conf->hostname,
+		   msg->job_id, msg->step_id, slurmd_conf->hostname,
 		   slurm_strerror(errno));
 	(void) log_ctld(LOG_LEVEL_ERROR, err_msg);
 	error("%s", err_msg);
@@ -789,7 +789,7 @@ _one_step_complete_msg(stepd_step_rec_t *job, int first, int last)
 		/* on error AGAIN, send to the slurmctld instead */
 		debug3("Rank %d sending complete to slurmctld instead, range "
 		       "%d to %d", step_complete.rank, first, last);
-	} else if (conf->msg_aggr_window_msgs > 1) {
+	} else if (slurmd_conf->msg_aggr_window_msgs > 1) {
 		/* this is the base of the tree, its parent is slurmctld */
 		debug3("Rank %d sending complete to slurmd for message aggr, "
 		       "range %d to %d",
@@ -797,7 +797,8 @@ _one_step_complete_msg(stepd_step_rec_t *job, int first, int last)
 		/* this is the base of the tree, but we are doing
 		 * message aggr so send it to the slurmd to handle */
 		req.msg_type = REQUEST_STEP_COMPLETE_AGGR;
-		slurm_set_addr_char(&req.address, conf->port, conf->hostname);
+		slurm_set_addr_char(&req.address, slurmd_conf->port,
+				    slurmd_conf->hostname);
 		for (i = 0; i <= REVERSE_TREE_PARENT_RETRY; i++) {
 			if (i)
 				sleep(1);
@@ -1111,7 +1112,7 @@ static int _spawn_job_container(stepd_step_rec_t *job)
 	}
 
 	_set_job_state(job, SLURMSTEPD_STEP_RUNNING);
-	if (!conf->job_acct_gather_freq)
+	if (!slurmd_conf->job_acct_gather_freq)
 		jobacct_gather_stat_task(0);
 
 	if (spank_task_post_fork(job, -1) < 0)
@@ -1232,11 +1233,12 @@ job_manager(stepd_step_rec_t *job)
 	if (!job->batch && (job->accel_bind_type || job->tres_bind ||
 	    job->tres_freq)) {
 		List gres_list = NULL;
-		(void) gres_plugin_init_node_config(conf->node_name,
-						    conf->gres,
+		(void) gres_plugin_init_node_config(slurmd_conf->node_name,
+						    slurmd_conf->gres,
 						    &gres_list);
 		debug2("Running gres_plugin_node_config_load()!");
-		(void) gres_plugin_node_config_load(conf->cpus, conf->node_name,
+		(void) gres_plugin_node_config_load(slurmd_conf->cpus,
+						    slurmd_conf->node_name,
 						gres_list,
 						(void *)&xcpuinfo_abs_to_mac,
 						(void *)&xcpuinfo_mac_to_abs);
@@ -1265,7 +1267,7 @@ job_manager(stepd_step_rec_t *job)
 		rc = SLURM_ERROR;
 		xstrfmtcat(err_msg,
 			   "mpi_hook_slurmstepd_prefork failure for job %u.%u on %s",
-			   job->jobid, job->stepid, conf->hostname);
+			   job->jobid, job->stepid, slurmd_conf->hostname);
 		(void) log_ctld(LOG_LEVEL_ERROR, err_msg);
 		xfree(err_msg);
 		goto fail3;
@@ -1322,7 +1324,7 @@ job_manager(stepd_step_rec_t *job)
 	/* if we are not polling then we need to make sure we get some
 	 * information here
 	 */
-	if (!conf->job_acct_gather_freq)
+	if (!slurmd_conf->job_acct_gather_freq)
 		jobacct_gather_stat_task(0);
 
 	/* Send job launch response with list of pids */
@@ -1666,7 +1668,7 @@ _fork_all_tasks(stepd_step_rec_t *job, bool *io_initialized)
 	 * Create hwloc xml file here to avoid threading issues later.
 	 * This has to be done after task_g_pre_setuid().
 	 */
-	xcpuinfo_hwloc_topo_load(NULL, conf->hwloc_xml, false);
+	xcpuinfo_hwloc_topo_load(NULL, slurmd_conf->hwloc_xml, false);
 
 	/*
 	 * Temporarily drop effective privileges, except for the euid.
@@ -1675,7 +1677,7 @@ _fork_all_tasks(stepd_step_rec_t *job, bool *io_initialized)
 	if (_drop_privileges (job, false, &sprivs, true) < 0)
 		return ESLURMD_SET_UID_OR_GID_ERROR;
 
-	if (pam_setup(job->user_name, conf->hostname)
+	if (pam_setup(job->user_name, slurmd_conf->hostname)
 	    != SLURM_SUCCESS){
 		error ("error in pam_setup");
 		rc = SLURM_ERROR;
@@ -1781,7 +1783,7 @@ _fork_all_tasks(stepd_step_rec_t *job, bool *io_initialized)
 			/* jobacctinfo_endpoll();
 			 * closing jobacct files here causes deadlock */
 
-			if (conf->propagate_prio)
+			if (slurmd_conf->propagate_prio)
 				_set_prio_process(job);
 
 			/*
@@ -2134,11 +2136,11 @@ _wait_for_any_task(stepd_step_rec_t *job, bool waitflag)
 						    job->task_epilog,
 						    job, 5, job->env);
 			}
-			if (conf->task_epilog) {
+			if (slurmd_conf->task_epilog) {
 				char *my_epilog;
-				slurm_mutex_lock(&conf->config_mutex);
-				my_epilog = xstrdup(conf->task_epilog);
-				slurm_mutex_unlock(&conf->config_mutex);
+				slurm_mutex_lock(&slurmd_conf->config_mutex);
+				my_epilog = xstrdup(slurmd_conf->task_epilog);
+				slurm_mutex_unlock(&slurmd_conf->config_mutex);
 				_run_script_as_user("slurm task_epilog",
 						    my_epilog,
 						    job, -1, job->env);
@@ -2254,10 +2256,10 @@ _make_batch_dir(stepd_step_rec_t *job)
 
 	if (job->stepid == NO_VAL)
 		snprintf(path, sizeof(path), "%s/job%05u",
-			 conf->spooldir, job->jobid);
+			 slurmd_conf->spooldir, job->jobid);
 	else {
 		snprintf(path, sizeof(path), "%s/job%05u.%05u",
-			 conf->spooldir, job->jobid, job->stepid);
+			 slurmd_conf->spooldir, job->jobid, job->stepid);
 	}
 
 	if ((mkdir(path, 0750) < 0) && (errno != EEXIST)) {
@@ -2348,7 +2350,7 @@ extern int stepd_drain_node(char *reason)
 	update_node_msg_t update_node_msg;
 
 	memset(&update_node_msg, 0, sizeof(update_node_msg));
-	update_node_msg.node_names = conf->node_name;
+	update_node_msg.node_names = slurmd_conf->node_name;
 	update_node_msg.node_state = NODE_STATE_DRAIN;
 	update_node_msg.reason = reason;
 	update_node_msg.reason_uid = getuid();
@@ -2385,8 +2387,8 @@ _send_launch_failure(launch_tasks_request_msg_t *msg, slurm_addr_t *cli, int rc,
 	}
 
 #ifndef HAVE_FRONT_END
-	nodeid = nodelist_find(msg->complete_nodelist, conf->node_name);
-	name = xstrdup(conf->node_name);
+	nodeid = nodelist_find(msg->complete_nodelist, slurmd_conf->node_name);
+	name = xstrdup(slurmd_conf->node_name);
 #else
 	nodeid = 0;
 	name = xstrdup(msg->complete_nodelist);
@@ -2463,7 +2465,7 @@ _send_complete_batch_script_msg(stepd_step_rec_t *job, int err, int status)
 	complete_batch_script_msg_t req;
 	bool msg_to_ctld = true;
 
-	if (conf->msg_aggr_window_msgs > 1)
+	if (slurmd_conf->msg_aggr_window_msgs > 1)
 		msg_to_ctld = false;
 
 	memset(&req, 0, sizeof(req));
@@ -2493,7 +2495,8 @@ _send_complete_batch_script_msg(stepd_step_rec_t *job, int err, int status)
 			 * may get a new job to launch */
 			if (i == 0) {
 				slurm_set_addr_char(&req_msg.address,
-						    conf->port, conf->hostname);
+						    slurmd_conf->port,
+						    slurmd_conf->hostname);
 			}
 			msg_rc = slurm_send_recv_rc_msg_only_one(&req_msg,
 								 &rc, 0);
@@ -2605,7 +2608,7 @@ _slurmd_job_log_init(stepd_step_rec_t *job)
 {
 	char argv0[64];
 
-	conf->log_opts.buffered = 1;
+	slurmd_conf->log_opts.buffered = 1;
 
 	/*
 	 * Reset stderr logging to user requested level
@@ -2616,12 +2619,12 @@ _slurmd_job_log_init(stepd_step_rec_t *job)
 	 * stdio code, which would otherwise create more stderr traffic
 	 * to srun and therefore more debug messages in an endless loop.
 	 */
-	conf->log_opts.stderr_level = LOG_LEVEL_ERROR + job->debug;
-	if (conf->log_opts.stderr_level > LOG_LEVEL_DEBUG3)
-		conf->log_opts.stderr_level = LOG_LEVEL_DEBUG3;
+	slurmd_conf->log_opts.stderr_level = LOG_LEVEL_ERROR + job->debug;
+	if (slurmd_conf->log_opts.stderr_level > LOG_LEVEL_DEBUG3)
+		slurmd_conf->log_opts.stderr_level = LOG_LEVEL_DEBUG3;
 
 #if defined(MULTIPLE_SLURMD)
-	snprintf(argv0, sizeof(argv0), "slurmstepd-%s", conf->node_name);
+	snprintf(argv0, sizeof(argv0), "slurmstepd-%s", slurmd_conf->node_name);
 #else
 	snprintf(argv0, sizeof(argv0), "slurmstepd");
 #endif
@@ -2629,7 +2632,7 @@ _slurmd_job_log_init(stepd_step_rec_t *job)
 	 * reinitialize log
 	 */
 
-	log_alter(conf->log_opts, 0, NULL);
+	log_alter(slurmd_conf->log_opts, 0, NULL);
 	log_set_argv0(argv0);
 
 	/*  Connect slurmd stderr to stderr of job, unless we are using
@@ -2655,7 +2658,7 @@ _slurmd_job_log_init(stepd_step_rec_t *job)
 			return ESLURMD_IO_ERROR;
 		}
 	}
-	verbose("debug level = %d", conf->log_opts.stderr_level);
+	verbose("debug level = %d", slurmd_conf->log_opts.stderr_level);
 	return SLURM_SUCCESS;
 }
 
@@ -2679,7 +2682,7 @@ static void _set_prio_process (stepd_step_rec_t *job)
 		prio_process = atoi( env_val );
 	}
 
-	if (conf->propagate_prio == PROP_PRIO_NICER) {
+	if (slurmd_conf->propagate_prio == PROP_PRIO_NICER) {
 		prio_daemon = getpriority( PRIO_PROCESS, 0 );
 		prio_process = MAX( prio_process, (prio_daemon + 1) );
 	}

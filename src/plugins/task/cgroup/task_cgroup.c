@@ -56,6 +56,16 @@
 #include "task_cgroup_memory.h"
 #include "task_cgroup_devices.h"
 
+/* These are defined here so when we link with something other than
+ * the slurmd we will have these symbols defined.  They will get
+ * overwritten when linking with the slurmd.
+ */
+#if defined (__APPLE__)
+extern slurmd_conf_t *slurmd_conf __attribute__((weak_import));
+#else
+slurmd_conf_t *slurmd_conf;
+#endif
+
 /*
  * These variables are required by the generic plugin interface.  If they
  * are not found in the plugin, the plugin loader will ignore it.
@@ -333,8 +343,8 @@ extern char* task_cgroup_create_slurm_cg (xcgroup_ns_t* ns) {
 	slurm_mutex_unlock(&xcgroup_config_read_mutex);
 
 #ifdef MULTIPLE_SLURMD
-	if ( conf->node_name != NULL )
-		xstrsubstitute(pre,"%n", conf->node_name);
+	if ( slurmd_conf->node_name != NULL )
+		xstrsubstitute(pre,"%n", slurmd_conf->node_name);
 	else {
 		xfree(pre);
 		pre = (char*) xstrdup("/slurm");

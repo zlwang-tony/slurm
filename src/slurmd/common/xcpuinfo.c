@@ -241,7 +241,7 @@ handle_write:
 		/* error in load hardware topology */
 		debug("hwloc_topology_load() failed.");
 		ret = SLURM_ERROR;
-	} else if (!conf->def_config) {
+	} else if (!slurmd_conf->def_config) {
 		debug2("hwloc_topology_export_xml");
 		if (_internal_hwloc_topology_export_xml(*topology, topo_file)) {
 			/* error in export hardware topology */
@@ -296,7 +296,7 @@ extern int xcpuinfo_hwloc_topo_get(
 
 	if (!hwloc_xml_whole)
 		hwloc_xml_whole = xstrdup_printf("%s/hwloc_topo_whole.xml",
-						 conf->spooldir);
+						 slurmd_conf->spooldir);
 	if (xcpuinfo_hwloc_topo_load(&topology, hwloc_xml_whole, true)
 	    == SLURM_ERROR) {
 		hwloc_topology_destroy(topology);
@@ -1003,8 +1003,8 @@ xcpuinfo_abs_to_mac(char* lrange,char** prange)
 	int rc = SLURM_SUCCESS;
 
 	if (total_cores == -1) {
-		total_cores = conf->sockets * conf->cores;
-		total_cpus  = conf->block_map_size;
+		total_cores = slurmd_conf->sockets * slurmd_conf->cores;
+		total_cpus  = slurmd_conf->block_map_size;
 	}
 
 	/* allocate bitmap */
@@ -1022,14 +1022,16 @@ xcpuinfo_abs_to_mac(char* lrange,char** prange)
 		goto end_it;
 	}
 
-	/* mapping abstract id to machine id using conf->block_map */
+	/* mapping abstract id to machine id using slurmd_conf->block_map */
 	for (icore = 0; icore < total_cores; icore++) {
 		if (bit_test(absmap, icore)) {
-			for (ithread = 0; ithread<conf->threads; ithread++) {
-				absid  = icore*conf->threads + ithread;
+			for (ithread = 0;
+			     ithread < slurmd_conf->threads;
+			     ithread++) {
+				absid  = icore * slurmd_conf->threads + ithread;
 				absid %= total_cpus;
 
-				macid  = conf->block_map[absid];
+				macid  = slurmd_conf->block_map[absid];
 				macid %= total_cpus;
 
 				bit_set(macmap, macid);

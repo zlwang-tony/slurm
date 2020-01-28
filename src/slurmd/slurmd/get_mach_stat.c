@@ -239,7 +239,7 @@ extern int get_up_time(uint32_t *up_time)
 	}
 
 
-	if (conf->boot_time) {
+	if (slurmd_conf->boot_time) {
 		/* Make node look like it rebooted when slurmd started */
 		static uint32_t orig_uptime = 0;
 		if (orig_uptime == 0)

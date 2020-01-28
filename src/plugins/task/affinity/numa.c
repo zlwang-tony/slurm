@@ -144,7 +144,7 @@ void slurm_chk_memset(nodemask_t *mask, stepd_step_rec_t *job)
 	fprintf(stderr, "mem-bind%s%s - "
 			"%s, task %2u %2u [%u]: mask 0x%s%s\n",
 			mode, bind_type,
-			conf->hostname,
+			slurmd_conf->hostname,
 			task_gid,
 			task_lid,
 			mypid,
@@ -171,7 +171,7 @@ int get_memset(nodemask_t *mask, stepd_step_rec_t *job)
 	}
 
 	if (job->mem_bind_type & MEM_BIND_RANK) {
-		threads = MAX(conf->threads, 1);
+		threads = MAX(slurmd_conf->threads, 1);
 		nodemask_set(mask, job->envtp->localid % (job->cpus*threads));
 		return true;
 	}
@@ -251,7 +251,8 @@ extern uint16_t slurm_get_numa_node(uint16_t cpuid)
 	if (numa_array)
 		return numa_array[cpuid];
 
-	maxcpus = conf->sockets * conf->cores * conf->threads;
+	maxcpus = slurmd_conf->sockets * slurmd_conf->cores *
+		slurmd_conf->threads;
 
 	if (cpuid >= maxcpus)
 		return 0;

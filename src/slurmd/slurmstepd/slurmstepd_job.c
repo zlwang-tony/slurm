@@ -286,8 +286,8 @@ extern stepd_step_rec_t *stepd_step_rec_create(launch_tasks_request_msg_t *msg,
 	job = xmalloc(sizeof(stepd_step_rec_t));
 	job->msg = msg;
 #ifndef HAVE_FRONT_END
-	nodeid = nodelist_find(msg->complete_nodelist, conf->node_name);
-	job->node_name = xstrdup(conf->node_name);
+	nodeid = nodelist_find(msg->complete_nodelist, slurmd_conf->node_name);
+	job->node_name = xstrdup(slurmd_conf->node_name);
 #else
 	nodeid = 0;
 	job->node_name = xstrdup(msg->complete_nodelist);
@@ -467,21 +467,21 @@ extern stepd_step_rec_t *stepd_step_rec_create(launch_tasks_request_msg_t *msg,
 	acct_gather_profile_g_node_step_start(job);
 
 	acct_gather_profile_startpoll(msg->acctg_freq,
-				      conf->job_acct_gather_freq);
+				      slurmd_conf->job_acct_gather_freq);
 
 	job->timelimit   = (time_t) -1;
 	job->flags       = msg->flags;
 	job->switch_job  = msg->switch_job;
 	job->open_mode   = msg->open_mode;
 	job->options     = msg->options;
-	format_core_allocs(msg->cred, conf->node_name, conf->cpus,
+	format_core_allocs(msg->cred, slurmd_conf->node_name, slurmd_conf->cpus,
 			   &job->job_alloc_cores, &job->step_alloc_cores,
 			   &job->job_mem, &job->step_mem);
 
-	if (job->step_mem && conf->job_acct_oom_kill) {
+	if (job->step_mem && slurmd_conf->job_acct_oom_kill) {
 		jobacct_gather_set_mem_limit(job->jobid, job->stepid,
 					     job->step_mem);
-	} else if (job->job_mem && conf->job_acct_oom_kill) {
+	} else if (job->job_mem && slurmd_conf->job_acct_oom_kill) {
 		jobacct_gather_set_mem_limit(job->jobid, job->stepid,
 					     job->job_mem);
 	}
@@ -496,7 +496,7 @@ extern stepd_step_rec_t *stepd_step_rec_create(launch_tasks_request_msg_t *msg,
 		job->x11_target_port = msg->x11_target_port;
 	}
 
-	get_cred_gres(msg->cred, conf->node_name,
+	get_cred_gres(msg->cred, slurmd_conf->node_name,
 		      &job->job_gres_list, &job->step_gres_list);
 
 	list_append(job->sruns, (void *) srun);
@@ -542,7 +542,7 @@ batch_stepd_step_rec_create(batch_job_launch_msg_t *msg)
 	job->job_core_spec = msg->job_core_spec;
 
 	job->batch   = true;
-	job->node_name  = xstrdup(conf->node_name);
+	job->node_name  = xstrdup(slurmd_conf->node_name);
 
 	job->uid	= (uid_t) msg->uid;
 	job->gid	= (gid_t) msg->gid;
@@ -570,7 +570,7 @@ batch_stepd_step_rec_create(batch_job_launch_msg_t *msg)
 	acct_gather_profile_g_node_step_start(job);
 	/* needed for the jobacct_gather plugin to start */
 	acct_gather_profile_startpoll(msg->acctg_freq,
-				      conf->job_acct_gather_freq);
+				      slurmd_conf->job_acct_gather_freq);
 
 	job->open_mode  = msg->open_mode;
 	job->overcommit = (bool) msg->overcommit;
@@ -597,15 +597,15 @@ batch_stepd_step_rec_create(batch_job_launch_msg_t *msg)
 	if (msg->cpus_per_node)
 		job->cpus    = msg->cpus_per_node[0];
 
-	format_core_allocs(msg->cred, conf->node_name, conf->cpus,
+	format_core_allocs(msg->cred, slurmd_conf->node_name, slurmd_conf->cpus,
 			   &job->job_alloc_cores, &job->step_alloc_cores,
 			   &job->job_mem, &job->step_mem);
-	if (job->step_mem && conf->job_acct_oom_kill)
+	if (job->step_mem && slurmd_conf->job_acct_oom_kill)
 		jobacct_gather_set_mem_limit(job->jobid, NO_VAL, job->step_mem);
-	else if (job->job_mem && conf->job_acct_oom_kill)
+	else if (job->job_mem && slurmd_conf->job_acct_oom_kill)
 		jobacct_gather_set_mem_limit(job->jobid, NO_VAL, job->job_mem);
 
-	get_cred_gres(msg->cred, conf->node_name,
+	get_cred_gres(msg->cred, slurmd_conf->node_name,
 		      &job->job_gres_list, &job->step_gres_list);
 
 	srun = srun_info_create(NULL, NULL, NULL, NO_VAL16);

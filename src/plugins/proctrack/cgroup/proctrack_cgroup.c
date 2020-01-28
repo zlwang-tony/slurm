@@ -54,6 +54,16 @@
 #include "src/slurmd/slurmd/slurmd.h"
 #include "src/slurmd/slurmstepd/slurmstepd_job.h"
 
+/* These are defined here so when we link with something other than
+ * the slurmd we will have these symbols defined.  They will get
+ * overwritten when linking with the slurmd.
+ */
+#if defined (__APPLE__)
+extern slurmd_conf_t *slurmd_conf __attribute__((weak_import));
+#else
+slurmd_conf_t *slurmd_conf;
+#endif
+
 /*
  * These variables are required by the generic plugin interface.  If they
  * are not found in the plugin, the plugin loader will ignore it.
@@ -140,8 +150,8 @@ int _slurm_cgroup_create(stepd_step_rec_t *job, uint64_t id, uid_t uid, gid_t gi
 	slurm_mutex_unlock(&xcgroup_config_read_mutex);
 
 #ifdef MULTIPLE_SLURMD
-	if ( conf->node_name != NULL )
-		xstrsubstitute(pre,"%n", conf->node_name);
+	if ( slurmd_conf->node_name != NULL )
+		xstrsubstitute(pre,"%n", slurmd_conf->node_name);
 	else {
 		xfree(pre);
 		pre = (char*) xstrdup("/slurm");

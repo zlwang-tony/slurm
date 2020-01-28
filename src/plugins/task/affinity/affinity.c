@@ -70,20 +70,21 @@ static int _bind_ldom(uint32_t ldom, cpu_set_t *mask)
 	if (nmax > 0)
 		nnid = ldom % (nmax+1);
 	debug3("task/affinity: binding to NUMA node %d", nnid);
-	maxcpus = conf->sockets * conf->cores * conf->threads;
+	maxcpus = slurmd_conf->sockets * slurmd_conf->cores *
+		slurmd_conf->threads;
 	for (c = 0; c < maxcpus; c++) {
 		if (slurm_get_numa_node(c) == nnid)
 			CPU_SET(c, mask);
 	}
 	return true;
 #else
-	uint16_t s, sid  = ldom % conf->sockets;
-	uint16_t i, cpus = conf->cores * conf->threads;
-	if (!conf->block_map)
+	uint16_t s, sid  = ldom % slurmd_conf->sockets;
+	uint16_t i, cpus = slurmd_conf->cores * slurmd_conf->threads;
+	if (!slurmd_conf->block_map)
 		return false;
 	for (s = sid * cpus; s < (sid+1) * cpus; s++) {
-		i = s % conf->block_map_size;
-		CPU_SET(conf->block_map[i], mask);
+		i = s % slurmd_conf->block_map_size;
+		CPU_SET(slurmd_conf->block_map[i], mask);
 	}
 	return true;
 #endif
@@ -107,7 +108,7 @@ int get_cpuset(cpu_set_t *mask, stepd_step_rec_t *job)
 	}
 
 	if (job->cpu_bind_type & CPU_BIND_RANK) {
-		threads = MAX(conf->threads, 1);
+		threads = MAX(slurmd_conf->threads, 1);
 		CPU_SET(job->envtp->localid % (job->cpus*threads), mask);
 		return true;
 	}

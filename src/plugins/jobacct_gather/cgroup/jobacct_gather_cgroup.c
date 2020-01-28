@@ -59,9 +59,9 @@
  * overwritten when linking with the slurmd.
  */
 #if defined (__APPLE__)
-extern slurmd_conf_t *conf __attribute__((weak_import));
+extern slurmd_conf_t *slurmd_conf __attribute__((weak_import));
 #else
-slurmd_conf_t *conf;
+slurmd_conf_t *slurmd_conf;
 #endif
 
 
@@ -346,8 +346,8 @@ extern char* jobacct_cgroup_create_slurm_cg(xcgroup_ns_t* ns)
 	slurm_mutex_unlock(&xcgroup_config_read_mutex);
 
 #ifdef MULTIPLE_SLURMD
-	if (conf->node_name != NULL) {
-		xstrsubstitute(pre, "%n", conf->node_name);
+	if (slurmd_conf->node_name != NULL) {
+		xstrsubstitute(pre, "%n", slurmd_conf->node_name);
 	} else {
 		xfree(pre);
 		pre = (char*) xstrdup("/slurm");

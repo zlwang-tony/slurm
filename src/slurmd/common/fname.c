@@ -281,7 +281,7 @@ static void _step_path_check(char **p, char **q, char **name, unsigned int wid,
 	case 'N':  /* '%N' => node name      */
 		xmemcat(*name, *q, *p - offset);
 		if (!double_p) {
-			xstrfmtcat(*name, "%s", conf->hostname);
+			xstrfmtcat(*name, "%s", slurmd_conf->hostname);
 			(*p)++;
 		}
 		*q = (*p)++;
@@ -341,7 +341,7 @@ static void _batch_path_check(char **p, char **q, char **name,
 		break;
 	case 'N':  /* '%N' => node name      */
 		xmemcat(*name, *q, *p - 1);
-		xstrfmtcat(*name, "%s", conf->hostname);
+		xstrfmtcat(*name, "%s", slurmd_conf->hostname);
 		*q = ++(*p);
 		break;
 	case 's':  /* '%s' => step id        */

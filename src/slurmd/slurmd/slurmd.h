@@ -177,7 +177,7 @@ typedef struct slurmd_config {
 	bool		print_gres;	/* Print gres info (-G) and exit */
 } slurmd_conf_t;
 
-extern slurmd_conf_t * conf;
+extern slurmd_conf_t *slurmd_conf;
 extern int fini_job_cnt;
 extern uint32_t *fini_job_id;
 extern pthread_mutex_t fini_job_mutex;

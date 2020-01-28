@@ -206,7 +206,7 @@ extern int init_system_memory_cgroup(void)
 
 	allowed_swap_space = cg_conf->allowed_swap_space;
 
-	if ((totalram = (uint64_t) conf->real_memory_size) == 0)
+	if ((totalram = (uint64_t) slurmd_conf->real_memory_size) == 0)
 		error ("system cgroup: Unable to get RealMemory size");
 
 	max_kmem = _percent_in_bytes(totalram, cg_conf->max_kmem_percent);
@@ -317,8 +317,8 @@ static char* _system_cgroup_create_slurm_cg (xcgroup_ns_t* ns)
 	slurm_mutex_unlock(&xcgroup_config_read_mutex);
 
 #ifdef MULTIPLE_SLURMD
-	if ( conf->node_name != NULL )
-		xstrsubstitute(pre, "%n", conf->node_name);
+	if ( slurmd_conf->node_name != NULL )
+		xstrsubstitute(pre, "%n", slurmd_conf->node_name);
 	else {
 		xfree(pre);
 		pre = (char*) xstrdup("/slurm");
@@ -495,8 +495,8 @@ extern void attach_system_cgroup_pid(pid_t pid)
 	slurm_mutex_unlock(&xcgroup_config_read_mutex);
 
 #ifdef MULTIPLE_SLURMD
-	if ( conf->node_name != NULL )
-		xstrsubstitute(slurm_cgpath,"%n", conf->node_name);
+	if ( slurmd_conf->node_name != NULL )
+		xstrsubstitute(slurm_cgpath,"%n", slurmd_conf->node_name);
 	else {
 		xfree(slurm_cgpath);
 		slurm_cgpath = (char*) xstrdup("/slurm");

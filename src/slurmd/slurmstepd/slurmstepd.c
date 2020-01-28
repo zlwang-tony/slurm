@@ -98,7 +98,7 @@ int slurmstepd_blocked_signals[] = {
 };
 
 /* global variable */
-slurmd_conf_t * conf;
+slurmd_conf_t * slurmd_conf;
 extern char  ** environ;
 
 int
@@ -116,20 +116,20 @@ main (int argc, char **argv)
 		fatal ("Error in slurmstepd command line");
 
 	xsignal_block(slurmstepd_blocked_signals);
-	conf = xmalloc(sizeof(*conf));
-	conf->argv = &argv;
-	conf->argc = &argc;
+	slurmd_conf = xmalloc(sizeof(*slurmd_conf));
+	slurmd_conf->argv = &argv;
+	slurmd_conf->argc = &argc;
 	init_setproctitle(argc, argv);
 
 	log_init(argv[0], lopts, LOG_DAEMON, NULL);
+
+	/* Receive job parameters from the slurmd */
+	_init_from_slurmd(STDIN_FILENO, argv, &cli, &self, &msg);
 
 	if (slurm_select_init(1) != SLURM_SUCCESS )
 		fatal( "failed to initialize node selection plugin" );
 	if (slurm_auth_init(NULL) != SLURM_SUCCESS)
 		fatal( "failed to initialize authentication plugin" );
-
-	/* Receive job parameters from the slurmd */
-	_init_from_slurmd(STDIN_FILENO, argv, &cli, &self, &msg);
 
 	/* Create the stepd_step_rec_t, mostly from info in a
 	 * launch_tasks_request_msg_t or a batch_job_launch_msg_t */
@@ -197,8 +197,8 @@ extern int stepd_cleanup(slurm_msg_t *msg, stepd_step_rec_t *job,
 
 	mpi_fini();	/* Remove stale PMI2 sockets */
 
-	if (conf->hwloc_xml)
-		(void)remove(conf->hwloc_xml);
+	if (slurmd_conf->hwloc_xml)
+		(void)remove(slurmd_conf->hwloc_xml);
 
 #ifdef MEMORY_LEAK_DEBUG
 	acct_gather_conf_destroy();
@@ -211,19 +211,19 @@ extern int stepd_cleanup(slurm_msg_t *msg, stepd_step_rec_t *job,
 
 	xfree(cli);
 	xfree(self);
-	xfree(conf->block_map);
-	xfree(conf->block_map_inv);
-	xfree(conf->hostname);
-	xfree(conf->hwloc_xml);
-	xfree(conf->job_acct_gather_freq);
-	xfree(conf->job_acct_gather_type);
-	xfree(conf->logfile);
-	xfree(conf->node_name);
-	xfree(conf->node_topo_addr);
-	xfree(conf->node_topo_pattern);
-	xfree(conf->spooldir);
-	xfree(conf->task_epilog);
-	xfree(conf->task_prolog);
+	xfree(slurmd_conf->block_map);
+	xfree(slurmd_conf->block_map_inv);
+	xfree(slurmd_conf->hostname);
+	xfree(slurmd_conf->hwloc_xml);
+	xfree(slurmd_conf->job_acct_gather_freq);
+	xfree(slurmd_conf->job_acct_gather_type);
+	xfree(slurmd_conf->logfile);
+	xfree(slurmd_conf->node_name);
+	xfree(slurmd_conf->node_topo_addr);
+	xfree(slurmd_conf->node_topo_pattern);
+	xfree(slurmd_conf->spooldir);
+	xfree(slurmd_conf->task_epilog);
+	xfree(slurmd_conf->task_prolog);
 	xfree(conf);
 #endif
 	info("done with job");
@@ -257,10 +257,10 @@ static slurmd_conf_t *read_slurmd_conf_lite(int fd)
 	assoc_mgr_lock_t locks = { .tres = WRITE_LOCK };
 
 	/*  First check to see if we've already initialized the
-	 *   global slurmd_conf_t in 'conf'. Allocate memory if not.
+	 *   global slurmd_conf_t in 'slurmd_conf'. Allocate memory if not.
 	 */
-	if (conf) {
-		confl = conf;
+	if (slurmd_conf) {
+		confl = slurmd_conf;
 	} else {
 		local_conf = xmalloc(sizeof(slurmd_conf_t));
 		confl = local_conf;
@@ -381,7 +381,7 @@ static int _handle_spank_mode (int argc, char **argv)
 	 *   This could happen if slurmstepd is run standalone for
 	 *   testing.
 	 */
-	conf = read_slurmd_conf_lite (STDIN_FILENO);
+	slurmd_conf = read_slurmd_conf_lite (STDIN_FILENO);
 	close (STDIN_FILENO);
 
 	slurm_conf_init(NULL);
@@ -510,7 +510,7 @@ _init_from_slurmd(int sock, char **argv,
 	uint32_t jobid = 0, stepid = 0;
 
 	/* receive conf from slurmd */
-	if (!(conf = read_slurmd_conf_lite(sock)))
+	if (!(slurmd_conf = read_slurmd_conf_lite(sock)))
 		fatal("Failed to read conf from slurmd");
 
 	/* receive cgroup conf from slurmd */
@@ -574,7 +574,7 @@ _init_from_slurmd(int sock, char **argv,
 	gres_plugin_recv_stepd(sock);
 
 	/* Grab the slurmd's spooldir. Has %n expanded. */
-	cpu_freq_init(conf);
+	cpu_freq_init(slurmd_conf);
 
 	/* Receive cpu_frequency info from slurmd */
 	cpu_freq_recv_info(sock);
@@ -624,10 +624,11 @@ _init_from_slurmd(int sock, char **argv,
 
 	_set_job_log_prefix(jobid, stepid);
 
-	if (!conf->hwloc_xml)
-		conf->hwloc_xml = xstrdup_printf("%s/hwloc_topo_%u.%u.xml",
-						 conf->spooldir,
-						 jobid, stepid);
+	if (!slurmd_conf->hwloc_xml)
+		slurmd_conf->hwloc_xml = xstrdup_printf(
+			"%s/hwloc_topo_%u.%u.xml",
+			slurmd_conf->spooldir,
+			jobid, stepid);
 
 	/*
 	 * Swap the field to the srun client version, which will eventually
@@ -677,7 +678,7 @@ _step_setup(slurm_addr_t *cli, slurm_addr_t *self, slurm_msg_t *msg)
 	job->jobacct = jobacctinfo_create(NULL);
 
 	/* Establish GRES environment variables */
-	if (conf->debug_flags & DEBUG_FLAG_GRES) {
+	if (slurmd_conf->debug_flags & DEBUG_FLAG_GRES) {
 		gres_plugin_job_state_log(job->job_gres_list, job->jobid);
 		gres_plugin_step_state_log(job->step_gres_list, job->jobid,
 					   job->stepid);
@@ -693,9 +694,9 @@ _step_setup(slurm_addr_t *cli, slurm_addr_t *self, slurm_msg_t *msg)
 	 * Add slurmd node topology informations to job env array
 	 */
 	env_array_overwrite(&job->env,"SLURM_TOPOLOGY_ADDR",
-			    conf->node_topo_addr);
+			    slurmd_conf->node_topo_addr);
 	env_array_overwrite(&job->env,"SLURM_TOPOLOGY_ADDR_PATTERN",
-			    conf->node_topo_pattern);
+			    slurmd_conf->node_topo_pattern);
 
 	set_msg_node_id(job);
 

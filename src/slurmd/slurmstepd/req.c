@@ -139,7 +139,7 @@ static int msg_target_node_id = 0;
 static bool
 _slurm_authorized_user(uid_t uid)
 {
-	return ((uid == (uid_t) 0) || (uid == conf->slurm_user_id));
+	return ((uid == (uid_t) 0) || (uid == slurmd_conf->slurm_user_id));
 }
 
 /*
@@ -296,7 +296,7 @@ msg_thr_create(stepd_step_rec_t *job)
 	int fd;
 	eio_obj_t *eio_obj;
 	errno = 0;
-	fd = _domain_socket_create(conf->spooldir, conf->node_name,
+	fd = _domain_socket_create(slurmd_conf->spooldir, slurmd_conf->node_name,
 				   job->jobid, job->stepid);
 	if (fd == -1)
 		return SLURM_ERROR;
@@ -1838,7 +1838,8 @@ _handle_reconfig(int fd, stepd_step_rec_t *job, uid_t uid)
 	/* We just want to make sure the file handle is correct on a
 	   reconfigure since the file could had rolled thus making
 	   the currect fd incorrect. */
-	log_alter(conf->log_opts, SYSLOG_FACILITY_DAEMON, conf->logfile);
+	log_alter(slurmd_conf->log_opts, SYSLOG_FACILITY_DAEMON,
+		  slurmd_conf->logfile);
 	debug("_handle_reconfigure for job %u.%u successful",
 	      job->jobid, job->stepid);
 

@@ -397,7 +397,8 @@ extern void exec_task(stepd_step_rec_t *job, int local_proc_id)
 	job->envtp->env = env_array_copy((const char **) job->env);
 	setup_env(job->envtp, false);
 	setenvf(&job->envtp->env, "SLURM_JOB_GID", "%d", job->gid);
-	setenvf(&job->envtp->env, "SLURMD_NODENAME", "%s", conf->node_name);
+	setenvf(&job->envtp->env, "SLURMD_NODENAME", "%s",
+		slurmd_conf->node_name);
 	if (job->tres_bind) {
 		setenvf(&job->envtp->env, "SLURMD_TRES_BIND", "%s",
 			job->tres_bind);
@@ -457,11 +458,11 @@ extern void exec_task(stepd_step_rec_t *job, int local_proc_id)
 		exit(1);
 	}
 
-	if (conf->task_prolog) {
+	if (slurmd_conf->task_prolog) {
 		char *my_prolog;
-		slurm_mutex_lock(&conf->config_mutex);
-		my_prolog = xstrdup(conf->task_prolog);
-		slurm_mutex_unlock(&conf->config_mutex);
+		slurm_mutex_lock(&slurmd_conf->config_mutex);
+		my_prolog = xstrdup(slurmd_conf->task_prolog);
+		slurm_mutex_unlock(&slurmd_conf->config_mutex);
 		_run_script_and_set_env("slurm task_prolog",
 					my_prolog, job);
 		xfree(my_prolog);

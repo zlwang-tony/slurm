@@ -75,8 +75,8 @@ static void _lllp_generate_cpu_bind(launch_tasks_request_msg_t *req,
 /*     BLOCK_MAP     physical machine LLLP index to abstract block LLLP index
  *     BLOCK_MAP_INV physical abstract block LLLP index to machine LLLP index
  */
-#define BLOCK_MAP(index)	_block_map(index, conf->block_map)
-#define BLOCK_MAP_INV(index)	_block_map(index, conf->block_map_inv)
+#define BLOCK_MAP(index)	_block_map(index, slurmd_conf->block_map)
+#define BLOCK_MAP_INV(index)	_block_map(index, slurmd_conf->block_map_inv)
 
 
 /* _block_map
@@ -92,10 +92,10 @@ static uint16_t _block_map(uint16_t index, uint16_t *map)
 	    	return index;
 	}
 	/* make sure bit falls in map */
-	if (index >= conf->block_map_size) {
+	if (index >= slurmd_conf->block_map_size) {
 		debug3("wrapping index %u into block_map_size of %u",
-		       index, conf->block_map_size);
-		index = index % conf->block_map_size;
+		       index, slurmd_conf->block_map_size);
+		index = index % slurmd_conf->block_map_size;
 	}
 	index = map[index];
 	return(index);
@@ -189,16 +189,16 @@ void batch_bind(batch_job_launch_msg_t *req)
 	}
 
 	num_cpus  = MIN((sockets * cores),
-			 (conf->sockets * conf->cores));
+			 (slurmd_conf->sockets * slurmd_conf->cores));
 	req_map = (bitstr_t *) bit_alloc(num_cpus);
-	hw_map  = (bitstr_t *) bit_alloc(conf->block_map_size);
+	hw_map  = (bitstr_t *) bit_alloc(slurmd_conf->block_map_size);
 
 #ifdef HAVE_FRONT_END
 {
 	/* Since the front-end nodes are a shared resource, we limit each job
 	 * to one CPU based upon monotonically increasing sequence number */
 	static int last_id = 0;
-	bit_set(hw_map, ((last_id++) % conf->block_map_size));
+	bit_set(hw_map, ((last_id++) % slurmd_conf->block_map_size));
 	task_cnt = 1;
 }
 #else
@@ -226,9 +226,9 @@ void batch_bind(batch_job_launch_msg_t *req)
 		/* core_bitmap does not include threads, so we
 		 * add them here but limit them to what the job
 		 * requested */
-		for (t = 0; t < conf->threads; t++) {
-			uint16_t pos = p * conf->threads + t;
-			if (pos >= conf->block_map_size) {
+		for (t = 0; t < slurmd_conf->threads; t++) {
+			uint16_t pos = p * slurmd_conf->threads + t;
+			if (pos >= slurmd_conf->block_map_size) {
 				info("more resources configured than exist");
 				p = num_cpus;
 				break;
@@ -241,7 +241,7 @@ void batch_bind(batch_job_launch_msg_t *req)
 #endif
 	if (task_cnt) {
 		req->cpu_bind_type = CPU_BIND_MASK;
-		if (conf->task_plugin_param & CPU_BIND_VERBOSE)
+		if (slurmd_conf->task_plugin_param & CPU_BIND_VERBOSE)
 			req->cpu_bind_type |= CPU_BIND_VERBOSE;
 		xfree(req->cpu_bind);
 		req->cpu_bind = (char *)bit_fmt_hexmask(hw_map);
@@ -383,7 +383,7 @@ void lllp_distribution(launch_tasks_request_msg_t *req, uint32_t node_id)
 	static int only_one_thread_per_core = -1;
 
 	if (only_one_thread_per_core == -1) {
-		if (conf->cpus == (conf->sockets * conf->cores))
+		if (slurmd_conf->cpus == (slurmd_conf->sockets * slurmd_conf->cores))
 			only_one_thread_per_core = 1;
 		else
 			only_one_thread_per_core = 0;
@@ -732,9 +732,9 @@ static bitstr_t *_get_avail_map(launch_tasks_request_msg_t *req,
 	char *str;
 	int spec_thread_cnt = 0;
 
-	*hw_sockets = conf->sockets;
-	*hw_cores   = conf->cores;
-	*hw_threads = conf->threads;
+	*hw_sockets = slurmd_conf->sockets;
+	*hw_cores   = slurmd_conf->cores;
+	*hw_threads = slurmd_conf->threads;
 
 	if (slurm_cred_get_args(req->cred, &arg) != SLURM_SUCCESS) {
 		error("task/affinity: job lacks a credential");
@@ -743,7 +743,7 @@ static bitstr_t *_get_avail_map(launch_tasks_request_msg_t *req,
 
 	/* we need this node's ID in relation to the whole
 	 * job allocation, not just this jobstep */
-	job_node_id = nodelist_find(arg.job_hostlist, conf->node_name);
+	job_node_id = nodelist_find(arg.job_hostlist, slurmd_conf->node_name);
 	start = _get_local_node_info(&arg, job_node_id, &sockets, &cores);
 	if (start < 0) {
 		error("task/affinity: missing node %d in job credential",
@@ -756,7 +756,7 @@ static bitstr_t *_get_avail_map(launch_tasks_request_msg_t *req,
 
 	num_cpus = MIN((sockets * cores), ((*hw_sockets)*(*hw_cores)));
 	req_map = (bitstr_t *) bit_alloc(num_cpus);
-	hw_map  = (bitstr_t *) bit_alloc(conf->block_map_size);
+	hw_map  = (bitstr_t *) bit_alloc(slurmd_conf->block_map_size);
 
 	/* Transfer core_bitmap data to local req_map.
 	 * The MOD function handles the case where fewer processes
@@ -779,13 +779,13 @@ static bitstr_t *_get_avail_map(launch_tasks_request_msg_t *req,
 		   we really have this is needed to make sure we
 		   don't bust the bank.
 		*/
-		new_p = p % conf->block_map_size;
+		new_p = p % slurmd_conf->block_map_size;
 		/* core_bitmap does not include threads, so we
 		 * add them here but limit them to what the job
 		 * requested */
 		for (t = 0; t < (*hw_threads); t++) {
 			uint16_t bit = new_p * (*hw_threads) + t;
-			bit %= conf->block_map_size;
+			bit %= slurmd_conf->block_map_size;
 			bit_set(hw_map, bit);
 		}
 	}
@@ -798,14 +798,14 @@ static bitstr_t *_get_avail_map(launch_tasks_request_msg_t *req,
 	if (spec_thread_cnt) {
 		/* Skip specialized threads as needed */
 		int i, t, c, s;
-		for (t = conf->threads - 1;
+		for (t = slurmd_conf->threads - 1;
 		     ((t >= 0) && (spec_thread_cnt > 0)); t--) {
-			for (c = conf->cores - 1;
+			for (c = slurmd_conf->cores - 1;
 			     ((c >= 0) && (spec_thread_cnt > 0)); c--) {
-				for (s = conf->sockets - 1;
+				for (s = slurmd_conf->sockets - 1;
 				     ((s >= 0) && (spec_thread_cnt > 0)); s--) {
-					i = s * conf->cores + c;
-					i = (i * conf->threads) + t;
+					i = s * slurmd_conf->cores + c;
+					i = (i * slurmd_conf->threads) + t;
 					bit_clear(hw_map, i);
 					spec_thread_cnt--;
 				}
@@ -1033,7 +1033,7 @@ static int _task_layout_lllp_cyclic(launch_tasks_request_msg_t *req,
 
 			if (!masks[taskcount])
 				masks[taskcount] =
-					bit_alloc(conf->block_map_size);
+					bit_alloc(slurmd_conf->block_map_size);
 
 			//info("setting %d %d", taskcount, bit);
 			bit_set(masks[taskcount], bit);
@@ -1202,7 +1202,7 @@ static int _task_layout_lllp_block(launch_tasks_request_msg_t *req,
 
 			if (!masks[taskcount])
 				masks[taskcount] = bit_alloc(
-					conf->block_map_size);
+					slurmd_conf->block_map_size);
 			//info("setting %d %d", taskcount, i);
 			bit_set(masks[taskcount], i);
 
