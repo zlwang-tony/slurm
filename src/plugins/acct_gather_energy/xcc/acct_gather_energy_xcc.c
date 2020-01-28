@@ -59,16 +59,6 @@
  */
 #include <freeipmi/freeipmi.h>
 
-/* These are defined here so when we link with something other than
- * the slurmctld we will have these symbols defined.  They will get
- * overwritten when linking with the slurmctld.
- */
-#if defined (__APPLE__)
-extern slurmd_conf_t *conf __attribute__((weak_import));
-#else
-slurmd_conf_t *conf = NULL;
-#endif
-
 #define DEFAULT_IPMI_FREQ 30
 #define DEFAULT_IPMI_USER "USERID"
 #define DEFAULT_IPMI_PASS "PASSW0RD"
