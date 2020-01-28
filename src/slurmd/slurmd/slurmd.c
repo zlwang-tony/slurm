@@ -1768,6 +1768,12 @@ _slurmd_init(void)
 	slurm_conf_init(slurmd_conf->conffile);
 	init_node_conf();
 
+	/*
+	 * Read global slurm config file, override necessary values from
+	 * defaults and command line.
+	 */
+	_read_config();
+
 	if (slurm_select_init(1) != SLURM_SUCCESS)
 		return SLURM_ERROR;
 	if (slurmd_conf->print_gres)
@@ -1776,12 +1782,6 @@ _slurmd_init(void)
 		return SLURM_ERROR;
 	build_all_nodeline_info(true, 0);
 	build_all_frontend_info(true);
-
-	/*
-	 * Read global slurm config file, override necessary values from
-	 * defaults and command line.
-	 */
-	_read_config();
 
 	/*
 	 * slurmd -G, calling it here rather than from _process_cmdline
