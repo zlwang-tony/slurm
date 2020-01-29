@@ -3072,6 +3072,7 @@ static int _init_slurm_conf(const char *file_name)
 	if (conf_initialized)
 		error("the conf_hashtbl is already inited");
 	debug("Reading slurm.conf file: %s", name);
+	xassert(!running_in_slurmstepd());
 	conf_hashtbl = s_p_hashtbl_create(slurm_conf_options);
 	conf_ptr->last_update = time(NULL);
 
