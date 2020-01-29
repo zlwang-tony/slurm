@@ -222,7 +222,8 @@ extern int stepd_cleanup(slurm_msg_t *msg, stepd_step_rec_t *job,
 	xfree(slurmd_conf->node_topo_addr);
 	xfree(slurmd_conf->node_topo_pattern);
 	xfree(slurmd_conf->spooldir);
-	xfree(slurmd_conf->task_epilog);
+	xfree(slurmd_conf->select_type);
+	xfree(slurmd_conf->task_prolog);
 	xfree(slurmd_conf->task_prolog);
 	xfree(conf);
 #endif

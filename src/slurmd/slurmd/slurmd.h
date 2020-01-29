@@ -175,6 +175,21 @@ typedef struct slurmd_config {
 	char           *x11_params;	/* X11Parameters */
 	char		*gres;		/* The node's slurm.conf GRES */
 	bool		print_gres;	/* Print gres info (-G) and exit */
+	char *plugindir;
+	uint16_t select_type_param;
+	char *switch_type;
+	char *gres_plugins;
+	char *topology_param;
+	uint16_t priority_flags;
+	uint16_t preempt_mode;
+	char *authinfo;
+	char *authtype;
+	char *task_plugin;
+	char *launch_params;
+	char *core_spec_plugin;
+	char *proctrack_type;
+	char *job_container_plugin;
+	char *cred_type;
 } slurmd_conf_t;
 
 extern slurmd_conf_t *slurmd_conf;

@@ -909,6 +909,7 @@ _read_config(void)
 	if (cf->preempt_mode & PREEMPT_MODE_GANG)
 		gang_flag = true;
 #endif
+	info("slurm.conf '%s'", cf->gres_plugins);
 
 	slurm_conf_unlock();
 	/* node_name may already be set from a command line parameter */
@@ -1059,24 +1060,41 @@ _read_config(void)
 
 	cf = slurm_conf_lock();
 	get_tmp_disk(&slurmd_conf->tmp_disk_space, cf->tmp_fs);
+	_free_and_set(slurmd_conf->authinfo, xstrdup(cf->authinfo));
+	_free_and_set(slurmd_conf->authtype, xstrdup(cf->authtype));
 	_free_and_set(slurmd_conf->cluster_name, xstrdup(cf->cluster_name));
+	_free_and_set(slurmd_conf->core_spec_plugin,
+		      xstrdup(cf->core_spec_plugin));
+	_free_and_set(slurmd_conf->cred_type, xstrdup(cf->cred_type));
+	_free_and_set(slurmd_conf->launch_params,   xstrdup(cf->launch_params));
 	_free_and_set(slurmd_conf->epilog,   xstrdup(cf->epilog));
+	_free_and_set(slurmd_conf->job_container_plugin,
+		      xstrdup(cf->job_container_plugin));
 	_free_and_set(slurmd_conf->prolog,   xstrdup(cf->prolog));
 	_free_and_set(slurmd_conf->tmpfs,    xstrdup(cf->tmp_fs));
+	_free_and_set(slurmd_conf->gres_plugins, xstrdup(cf->gres_plugins));
 	_free_and_set(slurmd_conf->health_check_program,
 		      xstrdup(cf->health_check_program));
 	_free_and_set(slurmd_conf->pidfile,  xstrdup(cf->slurmd_pidfile));
 	_massage_pathname(&slurmd_conf->pidfile);
 	_free_and_set(slurmd_conf->plugstack,   xstrdup(cf->plugstack));
+	_free_and_set(slurmd_conf->plugindir, xstrdup(cf->plugindir));
+	_free_and_set(slurmd_conf->proctrack_type, xstrdup(cf->proctrack_type));
+	_free_and_set(slurmd_conf->switch_type, xstrdup(cf->switch_type));
 	_free_and_set(slurmd_conf->select_type, xstrdup(cf->select_type));
+	_free_and_set(slurmd_conf->task_plugin, xstrdup(cf->task_plugin));
 	_free_and_set(slurmd_conf->task_prolog, xstrdup(cf->task_prolog));
 	_free_and_set(slurmd_conf->task_epilog, xstrdup(cf->task_epilog));
+	_free_and_set(slurmd_conf->topology_param, xstrdup(cf->topology_param));
 	_free_and_set(slurmd_conf->pubkey,   path_pubkey);
 	_free_and_set(slurmd_conf->x11_params, xstrdup(cf->x11_params));
 
 	slurmd_conf->debug_flags = cf->debug_flags;
 	slurmd_conf->syslog_debug = cf->slurmd_syslog_debug;
 	slurmd_conf->propagate_prio = cf->propagate_prio_process;
+	slurmd_conf->priority_flags = cf->priority_flags;
+	slurmd_conf->preempt_mode = cf->preempt_mode;
+	slurmd_conf->select_type_param = cf->select_type_param;
 
 	_free_and_set(slurmd_conf->job_acct_gather_freq,
 		      xstrdup(cf->job_acct_gather_freq));
@@ -1205,6 +1223,7 @@ _reconfigure(void)
 	build_all_frontend_info(true);
 	node_rec = find_node_record2(slurmd_conf->node_name);
 	if (node_rec && node_rec->config_ptr) {
+		info("here");
 		(void) gres_plugin_init_node_config(slurmd_conf->node_name,
 						    node_rec->config_ptr->gres,
 						    &gres_list);
@@ -1215,6 +1234,7 @@ _reconfigure(void)
 	(void) gres_plugin_node_config_load(cpu_cnt, slurmd_conf->node_name,
 					    gres_list,
 					    NULL, (void *)&xcpuinfo_mac_to_abs);
+	info("I loaded the config");
 	FREE_NULL_LIST(gres_list);
 
 	_build_conf_buf();
@@ -1373,10 +1393,12 @@ _destroy_conf(void)
 		xfree(slurmd_conf->node_topo_addr);
 		xfree(slurmd_conf->node_topo_pattern);
 		xfree(slurmd_conf->pidfile);
+		xfree(slurmd_conf->plugindir);
 		xfree(slurmd_conf->plugstack);
 		xfree(slurmd_conf->prolog);
 		xfree(slurmd_conf->pubkey);
 		xfree(slurmd_conf->select_type);
+		xfree(slurmd_conf->switch_type);
 		xfree(slurmd_conf->spooldir);
 		xfree(slurmd_conf->stepd_loc);
 		xfree(slurmd_conf->task_prolog);
@@ -1814,13 +1836,17 @@ _slurmd_init(void)
 				     slurmd_conf->block_map_size);
 	fini_job_id = xmalloc(sizeof(uint32_t) * fini_job_cnt);
 	node_rec = find_node_record2(slurmd_conf->node_name);
+	info("got %p", node_rec);
 	if (node_rec && node_rec->config_ptr) {
+		info("here");
 		(void) gres_plugin_init_node_config(slurmd_conf->node_name,
 						    node_rec->config_ptr->gres,
 						    &gres_list);
 		/* Send the slurm.conf GRES to the stepd */
+		xfree(slurmd_conf->gres);
 		slurmd_conf->gres = xstrdup(node_rec->config_ptr->gres);
 	}
+	info("slurmd '%s'", slurmd_conf->gres);
 	rc = gres_plugin_node_config_load(cpu_cnt, slurmd_conf->node_name,
 					  gres_list,
 					  NULL, (void *)&xcpuinfo_mac_to_abs);

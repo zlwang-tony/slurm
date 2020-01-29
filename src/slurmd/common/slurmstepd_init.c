@@ -84,6 +84,27 @@ extern void pack_slurmd_conf_lite(slurmd_conf_t *conf, Buf buffer)
 	packstr(conf->tmpfs, buffer);
 	packstr(conf->x11_params, buffer);
 	packstr(conf->gres, buffer);
+	packstr(conf->select_type, buffer);
+	pack16(conf->select_type_param, buffer);
+	packstr(conf->switch_type, buffer);
+	packstr(conf->acct_gather_energy_type, buffer);
+	packstr(conf->acct_gather_filesystem_type, buffer);
+	packstr(conf->acct_gather_interconnect_type, buffer);
+	packstr(conf->acct_gather_profile_type, buffer);
+	packstr(conf->gres_plugins, buffer);
+	packstr(conf->plugindir, buffer);
+	packstr(conf->topology_param, buffer);
+	pack16(conf->priority_flags, buffer);
+	pack16(conf->preempt_mode, buffer);
+	packstr(conf->authinfo, buffer);
+	packstr(conf->authtype, buffer);
+	packstr(conf->task_plugin, buffer);
+	packstr(conf->launch_params, buffer);
+	packstr(conf->core_spec_plugin, buffer);
+	packstr(conf->proctrack_type, buffer);
+	packstr(conf->job_container_plugin, buffer);
+	packstr(conf->cred_type, buffer);
+	packstr(conf->plugstack, buffer);
 }
 
 extern int unpack_slurmd_conf_lite_no_alloc(slurmd_conf_t *conf, Buf buffer)
@@ -138,6 +159,39 @@ extern int unpack_slurmd_conf_lite_no_alloc(slurmd_conf_t *conf, Buf buffer)
 		safe_unpackstr_xmalloc(&conf->tmpfs, &uint32_tmp, buffer);
 		safe_unpackstr_xmalloc(&conf->x11_params, &uint32_tmp, buffer);
 		safe_unpackstr_xmalloc(&conf->gres, &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&conf->select_type, &uint32_tmp, buffer);
+		safe_unpack16(&conf->select_type_param, buffer);
+		safe_unpackstr_xmalloc(&conf->switch_type, &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&conf->acct_gather_energy_type,
+				       &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&conf->acct_gather_filesystem_type,
+				       &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&conf->acct_gather_interconnect_type,
+				       &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&conf->acct_gather_profile_type,
+				       &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&conf->gres_plugins,
+				       &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&conf->plugindir, &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&conf->topology_param,
+				       &uint32_tmp, buffer);
+		safe_unpack16(&conf->priority_flags, buffer);
+		safe_unpack16(&conf->preempt_mode, buffer);
+		safe_unpackstr_xmalloc(&conf->authinfo, &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&conf->authtype, &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&conf->task_plugin, &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&conf->launch_params,
+				       &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&conf->core_spec_plugin,
+				       &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&conf->proctrack_type,
+				       &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&conf->job_container_plugin,
+				       &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&conf->cred_type,
+				       &uint32_tmp, buffer);
+		safe_unpackstr_xmalloc(&conf->plugstack,
+				       &uint32_tmp, buffer);
 	}
 
 	return SLURM_SUCCESS;
@@ -157,5 +211,14 @@ unpack_error:
 	xfree(conf->tmpfs);
 	xfree(conf->x11_params);
 	xfree(conf->gres);
+	xfree(conf->select_type);
+	xfree(conf->switch_type);
+	xfree(conf->acct_gather_energy_type);
+	xfree(conf->acct_gather_filesystem_type);
+	xfree(conf->acct_gather_interconnect_type);
+	xfree(conf->acct_gather_profile_type);
+	xfree(conf->gres_plugins);
+	xfree(conf->plugindir);
+	xfree(conf->topology_param);
 	return SLURM_ERROR;
 }
