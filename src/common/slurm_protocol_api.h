@@ -281,6 +281,12 @@ char *slurm_get_job_slurmctld_logfile(void);
  */
 char *slurm_get_node_features_plugins(void);
 
+/* slurm_get_plugstack
+ * get plugstack from various *_conf objects
+ * RET char *   - plugstack, MUST be xfreed by caller
+ */
+char *slurm_get_plugstack(void);
+
 /* slurm_get_slurmctld_plugstack
  * get slurmctld_plugstack from slurmctld_conf object from
  * slurmctld_conf object

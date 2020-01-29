@@ -756,11 +756,11 @@ static int _do_call_stack(struct spank_stack *stack,
 
 struct spank_stack *spank_stack_init(enum spank_context_type context)
 {
-	slurm_ctl_conf_t *conf = slurm_conf_lock();
-	const char *path = conf->plugstack;
-	slurm_conf_unlock();
+	const char *path = slurm_get_plugstack();
+	struct spank_stack *stack = spank_stack_create (path, context);
+	xfree(path);
 
-	return spank_stack_create (path, context);
+	return stack;
 }
 
 int _spank_init(enum spank_context_type context, stepd_step_rec_t * job)

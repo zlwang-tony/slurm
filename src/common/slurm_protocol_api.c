@@ -1633,6 +1633,24 @@ char *slurm_get_node_features_plugins(void)
 	return knl_plugins;
 }
 
+/* slurm_get_plugstack
+ * get plugstack from various *_conf objects
+ * RET char *   - plugstack, MUST be xfreed by caller
+ */
+char *slurm_get_plugstack(void)
+{
+	char *plugstack = NULL;
+	slurm_ctl_conf_t *conf;
+
+	if (slurmdbd_conf) {
+	} else {
+		conf = slurm_conf_lock();
+		plugstack = xstrdup(conf->plugstack);
+		slurm_conf_unlock();
+	}
+	return plugstack;
+}
+
 /* slurm_get_slurmctld_plugstack
  * get slurmctld_plugstack from slurmctld_conf object from
  * slurmctld_conf object
