@@ -39,9 +39,14 @@
 #include <inttypes.h>
 #include <stdio.h>
 
+#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
+
 #include "slurm/slurm_errno.h"
 
 #include "src/common/slurm_jobcomp.h"
+#include "src/common/xlua.h"
 #include "src/slurmctld/slurmctld.h"
 
 /*
@@ -72,14 +77,40 @@
 const char plugin_name[]       	= "Job completion logging LUA plugin";
 const char plugin_type[]       	= "jobcomp/lua";
 const uint32_t plugin_version	= SLURM_VERSION_NUMBER;
+static const char lua_script_path[] = DEFAULT_SCRIPT_DIR "/jobcomp.lua";
+static lua_State *L = NULL;
+static time_t lua_script_last_loaded = (time_t) 0;
+static int _job_rec_field_index(lua_State *L);
+static void _push_job_rec(struct job_record *job_ptr);
+
+/*
+ *  Mutex for protecting multi-threaded access to this plugin.
+ *   (Only 1 thread at a time should be in here)
+ */
+static pthread_mutex_t lua_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static int _load_script(void);
 
 /*
  * init() is called when the plugin is loaded, before any other functions
  * are called.  Put global initialization here.
  */
-int init ( void )
+int init (void)
 {
-	return SLURM_SUCCESS;
+	int rc = SLURM_SUCCESS;
+
+	/*
+	 * Need to dlopen() the Lua library to ensure plugins see
+	 * appropriate symptoms
+	 */
+	if ((rc = xlua_dlopen()) != SLURM_SUCCESS)
+		return rc;
+
+	slurm_mutex_lock(&lua_lock);
+	rc = _load_script();
+	slurm_mutex_unlock(&lua_lock);
+
+	return rc;
 }
 
 /*
@@ -87,14 +118,46 @@ int init ( void )
  * logging API.
  */
 
-int slurm_jobcomp_set_location (char * location)
+int slurm_jobcomp_set_location(char * location)
 {
 	return SLURM_SUCCESS;
 }
 
-int slurm_jobcomp_log_record (struct job_record *job_ptr)
+int slurm_jobcomp_log_record(struct job_record *job_ptr)
 {
-	return SLURM_SUCCESS;
+	int rc = SLURM_ERROR;
+	slurm_mutex_lock(&lua_lock);
+
+	if ((rc = _load_script()))
+		goto out;
+
+	/*
+	 *  All lua script functions should have been verified during
+	 *   initialization:
+	 */
+	lua_getglobal(L, "slurm_jobcomp_log_record");
+	if (lua_isnil(L, -1))
+		goto out;
+
+	_push_job_rec(job_ptr);
+	xlua_stack_dump("jobcomp/lua", "log_record, before lua_pcall", L);
+	if (lua_pcall (L, 1, 1, 0) != 0) {
+		error("%s/lua: %s: %s",
+		      __func__, lua_script_path, lua_tostring (L, -1));
+	} else {
+		if (lua_isnumber(L, -1)) {
+			rc = lua_tonumber(L, -1);
+		} else {
+			info("%s/lua: %s: non-numeric return code",
+			      __func__, lua_script_path);
+			rc = SLURM_SUCCESS;
+		}
+		lua_pop(L, 1);
+	}
+	xlua_stack_dump("jobcomp/lua", "log_record, after lua_pcall", L);
+
+out:	slurm_mutex_unlock(&lua_lock);
+	return rc;
 }
 
 List slurm_jobcomp_get_jobs(void *job_cond)
@@ -107,7 +170,66 @@ int slurm_jobcomp_archive(void *arch_cond)
 	return SLURM_SUCCESS;
 }
 
-int fini (void)
+int fini(void)
 {
+	if (L) {
+		lua_close(L);
+		L = NULL;
+		lua_script_last_loaded = 0;
+	}
 	return SLURM_SUCCESS;
+}
+
+static int _load_script(void)
+{
+	lua_State *load = NULL;
+	time_t load_time = lua_script_last_loaded;
+	const char *req_fxns[] = {
+		"slurm_jobcomp_log_record",
+		NULL
+	};
+
+	load = xlua_loadscript(L, "jobcomp/lua", lua_script_path, req_fxns, &load_time);
+	if (load == L)
+		return SLURM_SUCCESS;
+	if (!load)
+		return SLURM_ERROR;
+
+	/* local setup */
+	/* no local setup yet... */
+
+	/* since complete finished error free, swap the states */
+	if (L)
+		lua_close(L);
+	L = load;
+	lua_script_last_loaded = load_time;
+	return SLURM_SUCCESS;
+}
+
+static void _push_job_rec(struct job_record *job_ptr)
+{
+	lua_newtable(L);
+
+	lua_newtable(L);
+	lua_pushcfunction(L, _job_rec_field_index);
+	lua_setfield(L, -2, "__index");
+	/* Store the job_ptr in the metatable, so the index
+	 * function knows which struct it's getting data for.
+	 */
+	lua_pushlightuserdata(L, job_ptr);
+	lua_setfield(L, -2, "_job_rec_ptr");
+	lua_setmetatable(L, -2);
+}
+
+/* Get fields in an existing slurmctld job_record */
+static int _job_rec_field_index(lua_State *L)
+{
+	const char *name = luaL_checkstring(L, 2);
+	struct job_record *job_ptr;
+
+	lua_getmetatable(L, -2);
+	lua_getfield(L, -1, "_job_rec_ptr");
+	job_ptr = lua_touserdata(L, -1);
+
+	return xlua_job_record_field(L, job_ptr, name);
 }

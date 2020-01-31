@@ -1,4 +1,8 @@
 # Makefile for cli_filter plugins
 
 SUBDIRS = \
-	none
+        common \
+	lua \
+	none \
+	syslog \
+	user_defaults
