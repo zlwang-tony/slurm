@@ -979,8 +979,9 @@ static int _persist_fed_job_revoke(slurmdb_cluster_rec_t *conn, uint32_t job_id,
 	slurm_msg_t req_msg;
 	sib_msg_t   sib_msg;
 
-	if (!conn->fed.send ||
-	    (((slurm_persist_conn_t *)conn->fed.send)->fd == -1))
+	if (!fed_mgr_is_origin_job_id(job_id) &&
+	    (!conn->fed.send ||
+	     (((slurm_persist_conn_t *)conn->fed.send)->fd == -1)))
 		return SLURM_SUCCESS;
 
 	slurm_msg_t_init(&req_msg);
