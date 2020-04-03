@@ -110,6 +110,7 @@ typedef struct {
 	time_t     last_try;
 	int        last_defer;
 	uint16_t   msg_type;
+	uint16_t   sub_type;
 } agent_queue_t;
 
 enum fed_job_update_type {
@@ -486,6 +487,8 @@ static int _queue_rpc(slurmdb_cluster_rec_t *cluster, slurm_msg_t *req,
 	agent_rec->buffer = buf;
 	agent_rec->job_id = job_id;
 	agent_rec->msg_type = req->msg_type;
+	if (req->msg_type == REQUEST_SIB_MSG)
+		agent_rec->sub_type = ((sib_msg_t *)req->data)->sib_msg_type;
 	list_append(cluster->send_rpc, agent_rec);
 	slurm_mutex_lock(&agent_mutex);
 	agent_queue_size++;
@@ -2613,11 +2616,12 @@ static void *_agent_thread(void *arg)
 					    rpc_rec->buffer);
 				rpc_rec->last_try = now;
 				if (rpc_rec->last_defer == 128) {
-					info("%s: %s JobId=%u request to cluster %s is repeatedly failing",
+					info("%s: %s:%s JobId=%u request to cluster %s is repeatedly failing (backoff:%d)",
 					     __func__,
 					     rpc_num2string(rpc_rec->msg_type),
-					     rpc_rec->job_id, cluster->name);
-					rpc_rec->last_defer *= 2;
+					     _job_update_type_str(rpc_rec->sub_type),
+					     rpc_rec->job_id,
+					     cluster->name, rpc_rec->last_defer);
 				} else if (rpc_rec->last_defer)
 					rpc_rec->last_defer *= 2;
 				else
