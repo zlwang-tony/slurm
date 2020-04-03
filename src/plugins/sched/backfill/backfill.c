@@ -70,6 +70,7 @@
 #include "src/common/assoc_mgr.h"
 #include "src/common/gres.h"
 #include "src/common/list.h"
+#include "src/common/log.h"
 #include "src/common/macros.h"
 #include "src/common/node_features.h"
 #include "src/common/node_select.h"
@@ -2415,7 +2416,13 @@ next_task:
 			int rc;
 
 			/* get fed job lock from origin cluster */
-			if (fed_mgr_job_lock(job_ptr)) {
+			if ((rc = fed_mgr_job_lock(job_ptr))) {
+				if (errno == ESLURM_INVALID_JOB_ID) {
+					log_flag(FEDR, "fed job missing, revoking %pJ", job_ptr);
+					fed_mgr_job_revoke(job_ptr, false,
+							   JOB_CANCELLED, 0, now);
+					continue;
+				}
 				if (debug_flags & DEBUG_FLAG_BACKFILL)
 					info("backfill: %pJ can't get fed job lock from origin cluster to backfill job",
 					     job_ptr);

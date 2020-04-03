@@ -1709,7 +1709,13 @@ next_task:
 		}
 
 		/* get fed job lock from origin cluster */
-		if (fed_mgr_job_lock(job_ptr)) {
+		if ((error_code = fed_mgr_job_lock(job_ptr))) {
+			if (errno == ESLURM_INVALID_JOB_ID) {
+				log_flag(FEDR, "fed job missing revoking %pJ", job_ptr);
+				fed_mgr_job_revoke(job_ptr, false,
+						   JOB_CANCELLED, 0, now);
+				continue;
+			}
 			error_code = ESLURM_FED_JOB_LOCK;
 			goto skip_start;
 		}
