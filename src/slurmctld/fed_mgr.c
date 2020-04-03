@@ -930,7 +930,7 @@ static int _persist_update_job(slurmdb_cluster_rec_t *conn, uint32_t job_id,
 	req_msg.protocol_version = tmp_msg.protocol_version;
 	req_msg.data             = &sib_msg;
 
-	rc = _queue_rpc(conn, &req_msg, 0, false);
+	rc = _queue_rpc(conn, &req_msg, job_id, false);
 
 	free_buf(buffer);
 
@@ -2255,7 +2255,7 @@ static void _update_origin_job_dep(job_record_t *job_ptr,
 	req_msg.msg_type = REQUEST_UPDATE_ORIGIN_DEP;
 	req_msg.data = &dep_update_msg;
 
-	if (_queue_rpc(origin, &req_msg, 0, false))
+	if (_queue_rpc(origin, &req_msg, job_ptr->job_id, false))
 		error("%s: Failed to send dependency update for %pJ",
 		      __func__, job_ptr);
 }
@@ -3820,7 +3820,8 @@ static int _submit_sibling_jobs(job_desc_msg_t *job_desc, slurm_msg_t *msg,
 
 		req_msg.protocol_version = sibling->rpc_version;
 
-		if (!(rc = _queue_rpc(sibling, &req_msg, 0, false)))
+		if (!(rc = _queue_rpc(sibling, &req_msg, job_desc->job_id,
+				      false)))
 			job_desc->fed_siblings_active |=
 				FED_SIBLING_BIT(sibling->fed.id);
 		ret_rc |= rc;
@@ -4253,7 +4254,7 @@ extern int fed_mgr_submit_remote_dependencies(job_record_t *job_ptr,
 			continue;
 
 		req_msg.protocol_version = sibling->rpc_version;
-		rc |= _queue_rpc(sibling, &req_msg, 0, false);
+		rc |= _queue_rpc(sibling, &req_msg, job_ptr->job_id, false);
 	}
 	list_iterator_destroy(sib_itr);
 	return rc;
