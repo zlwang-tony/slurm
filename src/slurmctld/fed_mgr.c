@@ -2554,6 +2554,19 @@ static void *_fed_job_update_thread(void *arg)
 	return NULL;
 }
 
+static int _defer_rpcs(void *object, void *arg)
+{
+	agent_queue_t *rpc_rec = (agent_queue_t *)object;
+	agent_queue_t *rpc_defer = (agent_queue_t *)arg;
+
+	if (rpc_rec->job_id == rpc_defer->job_id) {
+		rpc_rec->last_try = rpc_defer->last_try;
+		rpc_rec->last_defer = rpc_defer->last_defer;
+	}
+
+	return SLURM_SUCCESS;
+}
+
 /* Start a thread to manage queued agent requests */
 static void *_agent_thread(void *arg)
 {
@@ -2608,8 +2621,13 @@ static void *_agent_thread(void *arg)
 			rpc_iter = list_iterator_create(cluster->send_rpc);
 			while ((rpc_rec = list_next(rpc_iter))) {
 				if ((rpc_rec->last_try + rpc_rec->last_defer) >=
-				    now)
+				    now) {
+					if (rpc_rec->job_id)
+						list_for_each(cluster->send_rpc,
+							      _defer_rpcs,
+							      rpc_rec);
 					continue;
+				}
 				if (!ctld_req_msg.my_list)
 					ctld_req_msg.my_list =list_create(NULL);
 				list_append(ctld_req_msg.my_list,
