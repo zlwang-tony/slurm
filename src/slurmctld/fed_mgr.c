@@ -2567,6 +2567,14 @@ static int _defer_rpcs(void *object, void *arg)
 	return SLURM_SUCCESS;
 }
 
+static int _delete_rpc_rec(void *object, void *arg)
+{
+	agent_queue_t *rpc_rec = (agent_queue_t *)object;
+	agent_queue_t *to_delete = (agent_queue_t *)arg;
+
+	return (rpc_rec == to_delete);
+}
+
 /* Start a thread to manage queued agent requests */
 static void *_agent_thread(void *arg)
 {
@@ -2618,6 +2626,7 @@ static void *_agent_thread(void *arg)
 
 			/* Move currently pending RPCs to new list */
 			ctld_req_msg.my_list = NULL;
+			List sending_rpc_reqs = list_create(NULL);
 			rpc_iter = list_iterator_create(cluster->send_rpc);
 			while ((rpc_rec = list_next(rpc_iter))) {
 				if ((rpc_rec->last_try + rpc_rec->last_defer) >=
@@ -2632,6 +2641,7 @@ static void *_agent_thread(void *arg)
 					ctld_req_msg.my_list =list_create(NULL);
 				list_append(ctld_req_msg.my_list,
 					    rpc_rec->buffer);
+				list_append(sending_rpc_reqs, rpc_rec);
 				rpc_rec->last_try = now;
 				if (rpc_rec->last_defer == 128) {
 					info("%s: %s:%s JobId=%u request to cluster %s is repeatedly failing (backoff:%d)",
@@ -2663,11 +2673,8 @@ static void *_agent_thread(void *arg)
 				resp_inx = 0;
 				success_bits = _parse_resp_ctld_mult(&resp_msg);
 				success_size = bit_size(success_bits);
-				rpc_iter = list_iterator_create(cluster->
-								send_rpc);
+				rpc_iter = list_iterator_create(sending_rpc_reqs);
 				while ((rpc_rec = list_next(rpc_iter))) {
-					if (rpc_rec->last_try != now)
-						continue;
 					if (resp_inx >= success_size) {
 						error("%s: bitmap too small (%d >= %d)",
 						      __func__, resp_inx,
@@ -2675,7 +2682,9 @@ static void *_agent_thread(void *arg)
 						break;
 					}
 					if (bit_test(success_bits, resp_inx++))
-						list_delete_item(rpc_iter);
+						list_delete_all(cluster->send_rpc,
+								_delete_rpc_rec,
+								rpc_rec);
 				}
 				list_iterator_destroy(rpc_iter);
 				FREE_NULL_BITMAP(success_bits);
@@ -2719,6 +2728,7 @@ static void *_agent_thread(void *arg)
 						   resp_msg.data);
 
 			list_destroy(ctld_req_msg.my_list);
+			list_destroy(sending_rpc_reqs);
 		}
 		list_iterator_destroy(cluster_iter);
 
