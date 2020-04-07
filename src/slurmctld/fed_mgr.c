@@ -5645,7 +5645,7 @@ static int _reconcile_fed_job(job_record_t *job_ptr, reconcile_sib_t *rec_sib)
 			     __func__, job_ptr, sibling_name);
 			fed_mgr_job_revoke(job_ptr, true, JOB_CANCELLED, 0,
 					   job_ptr->start_time);
-		} else {
+		} else if (job_ptr->fed_details->cluster_lock) {
 			/* The origin job has a lock but it's not on the sibling
 			 * being reconciled. The job could have been started by
 			 * another cluster while the sibling was down. Or the
