@@ -5811,10 +5811,13 @@ static int _sync_jobs(const char *sib_name, job_info_msg_t *job_info_msg,
 	rec_sib.job_info_msg = job_info_msg;
 	rec_sib.sync_time    = sync_time;
 
+	slurm_mutex_lock(&agent_mutex);
 	itr = list_iterator_create(job_list);
 	while ((job_ptr = list_next(itr)))
 		_reconcile_fed_job(job_ptr, &rec_sib);
 	list_iterator_destroy(itr);
+	list_flush(sib->send_rpc);
+	slurm_mutex_unlock(&agent_mutex);
 
 	sib->fed.sync_recvd = true;
 
