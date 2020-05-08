@@ -1,0 +1,503 @@
+#!/usr/bin/env expect
+############################################################################
+# Purpose: Validate heterogeneous gpu job options.
+#
+# Output:  "TEST: #.#" followed by "SUCCESS" if test was successful, OR
+#          "FAILURE: ..." otherwise with an explanation of the failure, OR
+#          anything else indicates a failure mode that must be investigated.
+############################################################################
+# Copyright (C) 2020 SchedMD LLC.
+# Written by Brian Christiansen <brian@schedmd.com>
+#
+# This file is part of Slurm, a resource management program.
+# For details, see <https://slurm.schedmd.com/>.
+# Please also read the included file: DISCLAIMER.
+#
+# Slurm is free software; you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free
+# Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
+#
+# Slurm is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+# details.
+#
+# You should have received a copy of the GNU General Public License along
+# with Slurm; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA.
+############################################################################
+
+source ./globals
+
+set test_id      "38.18"
+
+print_header $test_id
+
+set gpu_cnt [get_gpu_count 1]
+if {$gpu_cnt < 0} {
+	log_error "Error getting GPU count"
+	exit 1
+}
+if {$gpu_cnt < 2} {
+	log_warn "This test requires 2 or more GPUs per node in the default partition"
+	exit 0
+}
+
+proc submit_job {cmd expected_error} {
+	global number
+
+	set err_match 0
+	set job_id 0
+
+	set cmd_pid [spawn {*}$cmd]
+	expect {
+		-re "job ($number)" {
+			set job_id $expect_out(1,string)
+		}
+		-re $expected_error {
+			incr err_match
+			exp_continue
+		}
+		timeout {
+			log_error "command not responding"
+			slow_kill $cmd_pid
+			end_it 1
+		}
+		eof {
+			wait
+		}
+	}
+	if {$expected_error ne "noerror"} {
+		if {$err_match != 1} {
+			log_error "didn't get expected error ($expected_error)"
+			end_it 1
+		}
+	} elseif {!$job_id} {
+		log_error "didn't get a job_id"
+		end_it 1
+	}
+
+	return $job_id
+}
+
+proc scontrol {job_id grep re} {
+	global bin_bash bin_grep scontrol
+
+	set matches 0
+
+	spawn $bin_bash -c "exec $scontrol show job $job_id | $bin_grep -i '$grep'"
+	expect {
+		-re $re {
+			incr matches
+			exp_continue
+		}
+		timeout {
+			log_error "scontrol not responding"
+			end_it 1
+		}
+		eof {
+			wait
+		}
+	}
+	if {$matches != 1 } {
+		log_error "Didn't match $re ($matches != 1)"
+		end_it 1
+	}
+}
+
+proc cleanup { } {
+	global bin_rm test_id
+
+	return 0
+}
+
+proc end_it { exit_code } {
+	global test_id
+	if {$exit_code == 0} {
+		cleanup
+		print_success $test_id
+	}
+	exit $exit_code
+}
+
+proc test_gpu_bind {} {
+	global sbatch srun salloc
+
+	set tests [list \
+		"--gpu-bind=blah : --gpu-bind=closest" \
+		"--gpu-bind=closest : --gpu-bind=blah" \
+	]
+
+	set submission_errors {
+		"error: Invalid --tres-bind argument: gpu:blah"
+		"error: Invalid --tres-bind argument: gpu:blah"
+	}
+
+	foreach cmd {sbatch srun salloc} {
+		foreach a $tests b $submission_errors {
+			set run ""
+			if {$cmd eq "sbatch"} {
+				set run "$sbatch -o/dev/null $a --wrap=hostname"
+			} elseif {$cmd eq "srun"} {
+				set run "$srun $a hostname"
+			} else {
+				set run "$salloc $a hostname"
+			}
+
+			submit_job $run $b
+		}
+	}
+
+	set tests [list \
+		"--gpu-bind=closest : --gpu-bind=closest" \
+		"--gpu-bind=closest : --gpu-bind=map_gpu:1" \
+		"--gpu-bind=map_gpu:1 : --gpu-bind=closest" \
+		"--gpu-bind=closest : -n1" \
+		"-n1 : --gpu-bind=closest" \
+	]
+
+	set regexes [list \
+		"^JobId=.*TresBind=gpu:closest.*JobId=.*TresBind=gpu:closest" \
+		"^JobId=.*TresBind=gpu:closest.*JobId=.*TresBind=gpu:map_gpu:1" \
+		"^JobId=.*TresBind=gpu:map_gpu:1.*JobId=.*TresBind=gpu:closest" \
+		"^JobId=.*TresBind=gpu:closest.*JobId=" \
+		"^JobId=.*JobId=.*TresBind=gpu:closest" \
+	]
+
+	foreach cmd {sbatch srun salloc} {
+		foreach a $tests re $regexes {
+			set run ""
+			if {$cmd eq "sbatch"} {
+				set run "$sbatch -o/dev/null $a --wrap=hostname"
+			} elseif {$cmd eq "srun"} {
+				set run "$srun $a hostname"
+			} else {
+				set run "$salloc $a hostname"
+			}
+
+			set job_id [submit_job $run "noerror"]
+			scontrol $job_id "^JobId\\|TresBind" $re
+			cancel_job $job_id
+		}
+	}
+}
+
+proc test_gpu_freq {} {
+	global sbatch srun salloc
+
+	set tests [list \
+		"--gpu-freq=blah : --gpu-freq=low" \
+		"--gpu-freq=low : --gpu-freq=blah" \
+	]
+
+	set submission_errors {
+		"error: Invalid --tres-freq argument: gpu:blah"
+		"error: Invalid --tres-freq argument: gpu:blah"
+	}
+
+	foreach cmd {sbatch srun salloc} {
+		foreach a $tests b $submission_errors {
+			set run ""
+			if {$cmd eq "sbatch"} {
+				set run "$sbatch -o/dev/null $a --wrap=hostname"
+			} elseif {$cmd eq "srun"} {
+				set run "$srun $a hostname"
+			} else {
+				set run "$salloc $a hostname"
+			}
+
+			submit_job $run $b
+		}
+	}
+
+	set tests [list \
+		"--gpu-freq=low : --gpu-freq=low" \
+		"--gpu-freq=low : --gpu-freq=medium" \
+		"--gpu-freq=medium : --gpu-freq=low" \
+		"--gpu-freq=low : -n1" \
+		"-n1 : --gpu-freq=low" \
+	]
+
+	set regexes [list \
+		"^JobId=.*TresFreq=gpu:low.*JobId=.*TresFreq=gpu:low" \
+		"^JobId=.*TresFreq=gpu:low.*JobId=.*TresFreq=gpu:medium" \
+		"^JobId=.*TresFreq=gpu:medium.*JobId=.*TresFreq=gpu:low" \
+		"^JobId=.*TresFreq=gpu:low.*JobId=" \
+		"^JobId=.*JobId=.*TresFreq=gpu:low" \
+	]
+
+	foreach cmd {sbatch srun salloc} {
+		foreach a $tests re $regexes {
+			set run ""
+			if {$cmd eq "sbatch"} {
+				set run "$sbatch -o/dev/null $a --wrap=hostname"
+			} elseif {$cmd eq "srun"} {
+				set run "$srun $a hostname"
+			} else {
+				set run "$salloc $a hostname"
+			}
+
+			set job_id [submit_job $run "noerror"]
+			scontrol $job_id "^JobId\\|TresFreq" $re
+			cancel_job $job_id
+		}
+	}
+}
+
+proc test_cpus_per_gpu {} {
+	global sbatch srun salloc
+
+	set tests [list \
+		"--cpus-per-gpu=1 : --cpus-per-gpu=2" \
+		"--cpus-per-gpu=2 : --cpus-per-gpu=1" \
+		"--cpus-per-gpu=2 : -n1" \
+		"-n1 : --cpus-per-gpu=2" \
+	]
+
+	set regexes [list \
+		"^JobId=.*CpusPerTres=gpu:1.*JobId=.*CpusPerTres=gpu:2" \
+		"^JobId=.*CpusPerTres=gpu:2.*JobId=.*CpusPerTres=gpu:1" \
+		"^JobId=.*CpusPerTres=gpu:2.*JobId=.*" \
+		"^JobId=.*JobId=.*CpusPerTres=gpu:2" \
+	]
+
+	foreach cmd {sbatch srun salloc} {
+		foreach a $tests re $regexes {
+			set run ""
+			if {$cmd eq "sbatch"} {
+				set run "$sbatch -o/dev/null $a --wrap=hostname"
+			} elseif {$cmd eq "srun"} {
+				set run "$srun $a hostname"
+			} else {
+				set run "$salloc $a hostname"
+			}
+
+			set job_id [submit_job $run "noerror"]
+			scontrol $job_id "^JobId\\|CpusPerTres" $re
+			cancel_job $job_id
+		}
+	}
+}
+
+
+proc test_gpus_per_job {} {
+	global sbatch srun salloc
+
+	set tests [list \
+		"-n1 --gpus=1 : -n1 --gpus=2" \
+		"-n1 --gpus=2 : -n1 --gpus=1" \
+		"-n1 --gpus=2 : -n1" \
+		"-n1 : -n1 --gpus=2" \
+	]
+
+	set regexes [list \
+		"^JobId=.*TresPerJob=gpu:1.*JobId=.*TresPerJob=gpu:2" \
+		"^JobId=.*TresPerJob=gpu:2.*JobId=.*TresPerJob=gpu:1" \
+		"^JobId=.*TresPerJob=gpu:2.*JobId=.*" \
+		"^JobId=.*JobId=.*TresPerJob=gpu:2" \
+	]
+
+	foreach cmd {sbatch srun salloc} {
+		foreach a $tests re $regexes {
+			set run ""
+			if {$cmd eq "sbatch"} {
+				set run "$sbatch -o/dev/null $a --wrap=hostname"
+			} elseif {$cmd eq "srun"} {
+				set run "$srun $a hostname"
+			} else {
+				set run "$salloc $a hostname"
+			}
+
+			set job_id [submit_job $run "noerror"]
+			scontrol $job_id "^JobId\\|TresPerJob" $re
+			cancel_job $job_id
+		}
+	}
+}
+
+proc test_gpus_per_node {} {
+	global sbatch srun salloc
+
+	set tests [list \
+		"-n1 --gpus-per-node=1 : -n1 --gpus-per-node=2" \
+		"-n1 --gpus-per-node=2 : -n1 --gpus-per-node=1" \
+		"-n1 --gpus-per-node=2 : -n1" \
+		"-n1 : -n1 --gpus-per-node=2" \
+		"-n1 --gres=gpu:1 : -n1 --gres=gpu:2" \
+		"-n1 --gres=gpu:2 : -n1 --gres=gpu:1" \
+		"-n1 --gres=gpu:2 : -n1" \
+		"-n1 : -n1 --gres=gpu:2" \
+		"-n1 --gpus-per-node=1 --gres=gpu:2 : -n1 --gpus-per-node=2 --gres=gpu:1" \
+	]
+
+	set regexes [list \
+		"^JobId=.*TresPerNode=gpu:1.*JobId=.*TresPerNode=gpu:2" \
+		"^JobId=.*TresPerNode=gpu:2.*JobId=.*TresPerNode=gpu:1" \
+		"^JobId=.*TresPerNode=gpu:2.*JobId=.*" \
+		"^JobId=.*JobId=.*TresPerNode=gpu:2" \
+		"^JobId=.*TresPerNode=gpu:1.*JobId=.*TresPerNode=gpu:2" \
+		"^JobId=.*TresPerNode=gpu:2.*JobId=.*TresPerNode=gpu:1" \
+		"^JobId=.*TresPerNode=gpu:2.*JobId=.*" \
+		"^JobId=.*JobId=.*TresPerNode=gpu:2" \
+		"^JobId=.*TresPerNode=gpu:1,gpu:2.*JobId=.*TresPerNode=gpu:2,gpu:1" \
+	]
+
+	foreach cmd {sbatch srun salloc} {
+		foreach a $tests re $regexes {
+			set run ""
+			if {$cmd eq "sbatch"} {
+				set run "$sbatch -o/dev/null $a --wrap=hostname"
+			} elseif {$cmd eq "srun"} {
+				set run "$srun $a hostname"
+			} else {
+				set run "$salloc $a hostname"
+			}
+
+			set job_id [submit_job $run "noerror"]
+			scontrol $job_id "^JobId\\|TresPerNode" $re
+			cancel_job $job_id
+		}
+	}
+}
+
+proc test_gpus_per_socket {} {
+	global sbatch srun salloc
+
+	set tests [list \
+		"-n1 --gpus-per-socket=1 : -n1 " \
+		"-n1 : -n1 --gpus-per-socket=1" \
+	]
+
+	set submission_errors {
+		"--gpus-per-socket option requires --sockets-per-node specification"
+		"--gpus-per-socket option requires --sockets-per-node specification"
+	}
+
+	foreach cmd {sbatch srun salloc} {
+		foreach a $tests b $submission_errors {
+			set run ""
+			if {$cmd eq "sbatch"} {
+				set run "$sbatch -o/dev/null $a --wrap=hostname"
+			} elseif {$cmd eq "srun"} {
+				set run "$srun $a hostname"
+			} else {
+				set run "$salloc $a hostname"
+			}
+
+			submit_job $run $b
+		}
+	}
+
+	set tests [list \
+		"-n1 --sockets-per-node=1 --gpus-per-socket=1 : -n1 --sockets-per-node=1 --gpus-per-socket=2" \
+		"-n1 --sockets-per-node=1 --gpus-per-socket=2 : -n1 --sockets-per-node=1 --gpus-per-socket=1" \
+		"-n1 --sockets-per-node=1 --gpus-per-socket=2 : -n1" \
+		"-n1 : -n1 --sockets-per-node=1 --gpus-per-socket=2" \
+	]
+
+	set regexes [list \
+		"^JobId=.*TresPerSocket=gpu:1.*JobId=.*TresPerSocket=gpu:2" \
+		"^JobId=.*TresPerSocket=gpu:2.*JobId=.*TresPerSocket=gpu:1" \
+		"^JobId=.*TresPerSocket=gpu:2.*JobId=.*" \
+		"^JobId=.*JobId=.*TresPerSocket=gpu:2" \
+	]
+
+	foreach cmd {sbatch srun salloc} {
+		foreach a $tests re $regexes {
+			set run ""
+			if {$cmd eq "sbatch"} {
+				set run "$sbatch -o/dev/null $a --wrap=hostname"
+			} elseif {$cmd eq "srun"} {
+				set run "$srun $a hostname"
+			} else {
+				set run "$salloc $a hostname"
+			}
+
+			set job_id [submit_job $run "noerror"]
+			scontrol $job_id "^JobId\\|TresPerSocket" $re
+			cancel_job $job_id
+		}
+	}
+}
+
+proc test_gpus_per_task {} {
+	global sbatch srun salloc
+
+	set tests [list \
+		"-n1 --gpus-per-task=1 : -n1 --gpus-per-task=2" \
+		"-n1 --gpus-per-task=2 : -n1 --gpus-per-task=1" \
+		"-n1 --gpus-per-task=2 : -n1" \
+		"-n1 : -n1 --gpus-per-task=2" \
+	]
+
+	set regexes [list \
+		"^JobId=.*TresPerTask=gpu:1.*JobId=.*TresPerTask=gpu:2" \
+		"^JobId=.*TresPerTask=gpu:2.*JobId=.*TresPerTask=gpu:1" \
+		"^JobId=.*TresPerTask=gpu:2.*JobId=.*" \
+		"^JobId=.*JobId=.*TresPerTask=gpu:2" \
+	]
+
+	foreach cmd {sbatch srun salloc} {
+		foreach a $tests re $regexes {
+			set run ""
+			if {$cmd eq "sbatch"} {
+				set run "$sbatch -o/dev/null $a --wrap=hostname"
+			} elseif {$cmd eq "srun"} {
+				set run "$srun $a hostname"
+			} else {
+				set run "$salloc $a hostname"
+			}
+
+			set job_id [submit_job $run "noerror"]
+			scontrol $job_id "^JobId\\|TresPerTask" $re
+			cancel_job $job_id
+		}
+	}
+}
+
+proc test_mem_per_gpu {} {
+	global sbatch srun salloc
+
+	set tests [list \
+		"-n1 --mem-per-gpu=1 : -n1 --mem-per-gpu=2" \
+		"-n1 --mem-per-gpu=2 : -n1 --mem-per-gpu=1" \
+		"-n1 --mem-per-gpu=2 : -n1" \
+		"-n1 : -n1 --mem-per-gpu=2" \
+	]
+
+	set regexes [list \
+		"^JobId=.*MemPerTres=gpu:1.*JobId=.*MemPerTres=gpu:2" \
+		"^JobId=.*MemPerTres=gpu:2.*JobId=.*MemPerTres=gpu:1" \
+		"^JobId=.*MemPerTres=gpu:2.*JobId=.*" \
+		"^JobId=.*JobId=.*MemPerTres=gpu:2" \
+	]
+
+	foreach cmd {sbatch srun salloc} {
+		foreach a $tests re $regexes {
+			set run ""
+			if {$cmd eq "sbatch"} {
+				set run "$sbatch -o/dev/null $a --wrap=hostname"
+			} elseif {$cmd eq "srun"} {
+				set run "$srun $a hostname"
+			} else {
+				set run "$salloc $a hostname"
+			}
+
+			set job_id [submit_job $run "noerror"]
+			scontrol $job_id "^JobId\\|MemPerTres" $re
+			cancel_job $job_id
+		}
+	}
+}
+
+test_gpu_bind
+test_gpu_freq
+test_cpus_per_gpu
+test_gpus_per_job
+test_gpus_per_node
+test_gpus_per_socket
+test_gpus_per_task
+test_mem_per_gpu
+
+end_it 0
