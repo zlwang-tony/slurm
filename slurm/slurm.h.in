@@ -2068,6 +2068,7 @@ typedef struct {
 				      *	either srun or the lowest slurmd version
 				      *	it is talking to */
 	uint32_t state;		/* state of the step, see enum job_states */
+	uint32_t step_het_comp;	/* het component in normal allocation */
 	uint32_t step_id;	/* step ID */
 	uint32_t task_dist;	/* see enum task_dist_state */
 	uint32_t time_limit;	/* step time limit */
