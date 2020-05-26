@@ -941,10 +941,10 @@ static int _cluster_get_jobs(mysql_conn_t *mysql_conn,
 				job->first_step_ptr = step;
 			list_append(job->steps, step);
 			step->stepid = slurm_atoul(step_row[STEP_REQ_STEPID]);
-			/* info("got step %u.%u", */
-/* 			     job->header.jobnum, step->stepnum); */
 			step->step_het_comp =
 				slurm_atoul(step_row[STEP_REQ_STEP_HET_COMP]);
+			/* info("got step %u.%u+%u", */
+			/*      job->jobid, step->stepid, step->step_het_comp); */
 			step->state = slurm_atoul(step_row[STEP_REQ_STATE]);
 			step->exitcode =
 				slurm_atoul(step_row[STEP_REQ_EXIT_CODE]);
