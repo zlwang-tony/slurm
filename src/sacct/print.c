@@ -1072,10 +1072,15 @@ extern void print_fields(type_t type, void *object)
 				} else if (step->stepid == SLURM_EXTERN_CONT) {
 					tmp_char = xstrdup_printf(
 						"%s.extern", id);
-				} else {
+				} else if (step->step_het_comp == NO_VAL) {
 					tmp_char = xstrdup_printf(
 						"%s.%u",
 						id, step->stepid);
+				} else {
+					tmp_char = xstrdup_printf(
+						"%s.%u+%u",
+						id, step->stepid,
+						step->step_het_comp);
 				}
 				break;
 			case JOBCOMP:

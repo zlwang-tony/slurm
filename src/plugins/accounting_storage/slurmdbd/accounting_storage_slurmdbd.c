@@ -2739,6 +2739,7 @@ extern int jobacct_storage_p_step_start(void *db_conn, step_record_t *step_ptr)
 		req.job_submit_time   = step_ptr->job_ptr->resize_time;
 	else if (step_ptr->job_ptr->details)
 		req.job_submit_time   = step_ptr->job_ptr->details->submit_time;
+	req.step_het_comp = step_ptr->step_het_comp;
 	req.step_id     = step_ptr->step_id;
 	if (step_ptr->step_layout)
 		req.task_dist   = step_ptr->step_layout->task_dist;
@@ -2822,6 +2823,7 @@ extern int jobacct_storage_p_step_complete(void *db_conn,
 		req.job_tres_alloc_str = step_ptr->job_ptr->tres_alloc_str;
 
 	req.state       = step_ptr->state;
+	req.step_het_comp = step_ptr->step_het_comp;
 	req.step_id     = step_ptr->step_id;
 	req.total_tasks = tasks;
 

@@ -685,6 +685,7 @@ step_rec_to_hv(slurmdb_step_rec_t *rec, HV* hv)
     STORE_FIELD(hv, rec, state,           uint32_t);
     STORE_FIELD(hv, rec, stepid,          uint32_t);
     STORE_FIELD(hv, rec, stepname,        charp);
+    STORE_FIELD(hv, rec, step_het_comp,   uint32_t);
     STORE_FIELD(hv, rec, suspended,       uint32_t);
     STORE_FIELD(hv, rec, sys_cpu_sec,     uint32_t);
     STORE_FIELD(hv, rec, sys_cpu_usec,    uint32_t);

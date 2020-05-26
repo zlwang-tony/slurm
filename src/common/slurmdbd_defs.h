@@ -360,6 +360,7 @@ typedef struct dbd_step_comp_msg {
 	time_t   start_time;	/* step start time */
 	uint16_t state;         /* current state of node.  Used to get
 				   flags on the state (i.e. maintenance) */
+	uint32_t step_het_comp;	/* het step component if normal allocation */
 	uint32_t step_id;	/* step ID */
 	uint32_t total_tasks;	/* count of tasks for step */
 } dbd_step_comp_msg_t;
@@ -379,6 +380,7 @@ typedef struct dbd_step_start_msg {
 	uint32_t req_cpufreq_min; /* requested minimum CPU frequency  */
 	uint32_t req_cpufreq_max; /* requested maximum CPU frequency  */
 	uint32_t req_cpufreq_gov; /* requested CPU frequency governor */
+	uint32_t step_het_comp;	/* het step component if normal allocation */
 	uint32_t step_id;	/* step ID */
 	uint32_t task_dist;     /* layout method of step */
 	uint32_t total_tasks;	/* count of tasks for step */

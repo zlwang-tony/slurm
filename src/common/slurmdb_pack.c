@@ -4737,6 +4737,7 @@ extern void slurmdb_pack_step_rec(slurmdb_step_rec_t *step,
 		pack16(step->state, buffer);
 		pack32(step->stepid, buffer);   /* job's step number */
 		packstr(step->stepname, buffer);
+		pack32(step->step_het_comp, buffer);
 		pack32(step->suspended, buffer);
 		pack32(step->sys_cpu_sec, buffer);
 		pack32(step->sys_cpu_usec, buffer);
@@ -4808,6 +4809,7 @@ extern int slurmdb_unpack_step_rec(slurmdb_step_rec_t **step,
 		safe_unpack32(&step_ptr->stepid, buffer);
 		safe_unpackstr_xmalloc(&step_ptr->stepname,
 				       &uint32_tmp, buffer);
+		safe_unpack32(&step_ptr->step_het_comp, buffer);
 		safe_unpack32(&step_ptr->suspended, buffer);
 		safe_unpack32(&step_ptr->sys_cpu_sec, buffer);
 		safe_unpack32(&step_ptr->sys_cpu_usec, buffer);
@@ -4840,6 +4842,7 @@ extern int slurmdb_unpack_step_rec(slurmdb_step_rec_t **step,
 		safe_unpack32(&step_ptr->stepid, buffer);
 		safe_unpackstr_xmalloc(&step_ptr->stepname,
 				       &uint32_tmp, buffer);
+		step_ptr->step_het_comp = NO_VAL;
 		safe_unpack32(&step_ptr->suspended, buffer);
 		safe_unpack32(&step_ptr->sys_cpu_sec, buffer);
 		safe_unpack32(&step_ptr->sys_cpu_usec, buffer);

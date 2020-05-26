@@ -3424,9 +3424,15 @@ static int  _step_complete(slurmdbd_conn_t *slurmdbd_conn,
 		goto end_it;
 	}
 
-	debug2("DBD_STEP_COMPLETE: ID:%u.%u SUBMIT:%lu",
-	       step_comp_msg->job_id, step_comp_msg->step_id,
-	       (unsigned long) step_comp_msg->job_submit_time);
+	if (step_comp_msg->step_het_comp == NO_VAL)
+		debug2("DBD_STEP_COMPLETE: ID:%u.%u SUBMIT:%lu",
+		       step_comp_msg->job_id, step_comp_msg->step_id,
+		       (unsigned long) step_comp_msg->job_submit_time);
+	else
+		debug2("DBD_STEP_COMPLETE: ID:%u.%u+%u SUBMIT:%lu",
+		       step_comp_msg->job_id, step_comp_msg->step_id,
+		       step_comp_msg->step_het_comp,
+		       (unsigned long) step_comp_msg->job_submit_time);
 
 	memset(&step, 0, sizeof(step_record_t));
 	memset(&job, 0, sizeof(job_record_t));
@@ -3445,6 +3451,7 @@ static int  _step_complete(slurmdbd_conn_t *slurmdbd_conn,
 	job.tres_alloc_str = step_comp_msg->job_tres_alloc_str;
 	step.state = step_comp_msg->state;
 	step.step_id = step_comp_msg->step_id;
+	step.step_het_comp = step_comp_msg->step_het_comp;
 	details.submit_time = step_comp_msg->job_submit_time;
 	details.num_tasks = step_comp_msg->total_tasks;
 
@@ -3492,10 +3499,17 @@ static int  _step_start(slurmdbd_conn_t *slurmdbd_conn,
 		goto end_it;
 	}
 
-	debug2("DBD_STEP_START: ID:%u.%u NAME:%s SUBMIT:%lu",
-	       step_start_msg->job_id, step_start_msg->step_id,
-	       step_start_msg->name,
-	       (unsigned long) step_start_msg->job_submit_time);
+	if (step_start_msg->step_het_comp == NO_VAL)
+		debug2("DBD_STEP_START: ID:%u.%u NAME:%s SUBMIT:%lu",
+		       step_start_msg->job_id, step_start_msg->step_id,
+		       step_start_msg->name,
+		       (unsigned long) step_start_msg->job_submit_time);
+	else
+		debug2("DBD_STEP_START: ID:%u.%u+%u NAME:%s SUBMIT:%lu",
+		       step_start_msg->job_id, step_start_msg->step_id,
+		       step_start_msg->step_het_comp,
+		       step_start_msg->name,
+		       (unsigned long) step_start_msg->job_submit_time);
 
 	memset(&step, 0, sizeof(step_record_t));
 	memset(&job, 0, sizeof(job_record_t));
@@ -3513,6 +3527,7 @@ static int  _step_start(slurmdbd_conn_t *slurmdbd_conn,
 	step.start_time = step_start_msg->start_time;
 	details.submit_time = step_start_msg->job_submit_time;
 	step.step_id = step_start_msg->step_id;
+	step.step_het_comp = step_start_msg->step_het_comp;
 	details.num_tasks = step_start_msg->total_tasks;
 	step.cpu_freq_min = step_start_msg->req_cpufreq_min;
 	step.cpu_freq_max = step_start_msg->req_cpufreq_max;

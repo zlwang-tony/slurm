@@ -1072,6 +1072,7 @@ typedef struct {
 	slurmdb_stats_t stats;
 	uint32_t stepid;	/* job's step number */
 	char *stepname;
+	uint32_t step_het_comp;	/* het step component if normal allocation */
 	uint32_t suspended;
 	uint32_t sys_cpu_sec;
 	uint32_t sys_cpu_usec;

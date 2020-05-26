@@ -820,6 +820,7 @@ static void _pack_step_complete_msg(dbd_step_comp_msg_t *msg,
 		pack32(msg->req_uid, buffer);
 		pack_time(msg->start_time, buffer);
 		pack16(msg->state, buffer);
+		pack32(msg->step_het_comp, buffer);
 		pack32(msg->step_id, buffer);
 		pack32(msg->total_tasks, buffer);
 	} else if (rpc_version >= SLURM_MIN_PROTOCOL_VERSION) {
@@ -861,6 +862,7 @@ static int _unpack_step_complete_msg(dbd_step_comp_msg_t **msg,
 		safe_unpack32(&msg_ptr->req_uid, buffer);
 		safe_unpack_time(&msg_ptr->start_time, buffer);
 		safe_unpack16(&msg_ptr->state, buffer);
+		safe_unpack32(&msg_ptr->step_het_comp, buffer);
 		safe_unpack32(&msg_ptr->step_id, buffer);
 		safe_unpack32(&msg_ptr->total_tasks, buffer);
 	} else if (rpc_version >= SLURM_MIN_PROTOCOL_VERSION) {
@@ -877,6 +879,7 @@ static int _unpack_step_complete_msg(dbd_step_comp_msg_t **msg,
 		safe_unpack32(&msg_ptr->req_uid, buffer);
 		safe_unpack_time(&msg_ptr->start_time, buffer);
 		safe_unpack16(&msg_ptr->state, buffer);
+		msg_ptr->step_het_comp = NO_VAL;
 		safe_unpack32(&msg_ptr->step_id, buffer);
 		safe_unpack32(&msg_ptr->total_tasks, buffer);
 	} else
@@ -910,6 +913,7 @@ static void _pack_step_start_msg(dbd_step_start_msg_t *msg,
 		pack32(msg->req_cpufreq_min, buffer);
 		pack32(msg->req_cpufreq_max, buffer);
 		pack32(msg->req_cpufreq_gov, buffer);
+		pack32(msg->step_het_comp, buffer);
 		pack32(msg->step_id, buffer);
 		pack32(msg->task_dist, buffer);
 		pack32(msg->total_tasks, buffer);
@@ -954,6 +958,7 @@ static int _unpack_step_start_msg(dbd_step_start_msg_t **msg,
 		safe_unpack32(&msg_ptr->req_cpufreq_min, buffer);
 		safe_unpack32(&msg_ptr->req_cpufreq_max, buffer);
 		safe_unpack32(&msg_ptr->req_cpufreq_gov, buffer);
+		safe_unpack32(&msg_ptr->step_het_comp, buffer);
 		safe_unpack32(&msg_ptr->step_id, buffer);
 		safe_unpack32(&msg_ptr->task_dist, buffer);
 		safe_unpack32(&msg_ptr->total_tasks, buffer);
@@ -973,6 +978,7 @@ static int _unpack_step_start_msg(dbd_step_start_msg_t **msg,
 		safe_unpack32(&msg_ptr->req_cpufreq_max, buffer);
 		safe_unpack32(&msg_ptr->req_cpufreq_gov, buffer);
 		safe_unpack32(&msg_ptr->step_id, buffer);
+		msg_ptr->step_het_comp = NO_VAL;
 		safe_unpack32(&msg_ptr->task_dist, buffer);
 		safe_unpack32(&msg_ptr->total_tasks, buffer);
 		safe_unpackstr_xmalloc(&msg_ptr->tres_alloc_str,
