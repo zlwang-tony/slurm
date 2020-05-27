@@ -989,6 +989,7 @@ typedef struct kill_job_msg {
 	uint32_t spank_job_env_size;
 	time_t   start_time;	/* time of job start, track job requeue */
 	uint32_t step_id;
+	uint32_t step_het_comp;
 	time_t   time;		/* slurmctld's time of request */
 } kill_job_msg_t;
 

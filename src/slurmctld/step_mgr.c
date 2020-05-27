@@ -4348,6 +4348,7 @@ static void _signal_step_timelimit(job_record_t *job_ptr, step_record_t *step_pt
 	kill_step->job_id    = job_ptr->job_id;
 	kill_step->het_job_id = job_ptr->het_job_id;
 	kill_step->step_id   = step_ptr->step_id;
+	kill_step->step_het_comp = step_ptr->step_het_comp;
 	kill_step->job_state = job_ptr->job_state;
 	kill_step->job_uid   = job_ptr->user_id;
 	kill_step->job_gid   = job_ptr->group_id;

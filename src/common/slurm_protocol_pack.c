@@ -2614,6 +2614,7 @@ _pack_kill_job_msg(kill_job_msg_t * msg, Buf buffer, uint16_t protocol_version)
 		pack_time(msg->start_time, buffer);
 		pack32(msg->step_id, buffer);
 		pack_time(msg->time, buffer);
+		pack32(msg->step_het_comp, buffer);
 	} else if (protocol_version >= SLURM_20_02_PROTOCOL_VERSION) {
 		gres_plugin_job_alloc_pack(msg->job_gres_info, buffer,
 					   protocol_version);
@@ -2681,6 +2682,7 @@ _unpack_kill_job_msg(kill_job_msg_t ** msg, Buf buffer,
 		safe_unpack_time(&tmp_ptr->start_time, buffer);
 		safe_unpack32(&tmp_ptr->step_id, buffer);
 		safe_unpack_time(&tmp_ptr->time, buffer);
+		safe_unpack32(&tmp_ptr->step_het_comp, buffer);
 	} else if (protocol_version >= SLURM_20_02_PROTOCOL_VERSION) {
 		if (gres_plugin_job_alloc_unpack(&tmp_ptr->job_gres_info,
 						 buffer, protocol_version))
@@ -2699,6 +2701,7 @@ _unpack_kill_job_msg(kill_job_msg_t ** msg, Buf buffer,
 		safe_unpack_time(&tmp_ptr->start_time, buffer);
 		safe_unpack32(&tmp_ptr->step_id, buffer);
 		safe_unpack_time(&tmp_ptr->time, buffer);
+		tmp_ptr->step_het_comp = NO_VAL;
 	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		if (gres_plugin_job_alloc_unpack(&(tmp_ptr->job_gres_info),
 						 buffer, protocol_version))
@@ -2718,6 +2721,7 @@ _unpack_kill_job_msg(kill_job_msg_t ** msg, Buf buffer,
 		safe_unpack_time(&(tmp_ptr->start_time), buffer);
 		safe_unpack32(&(tmp_ptr->step_id),  buffer);
 		safe_unpack_time(&(tmp_ptr->time), buffer);
+		tmp_ptr->step_het_comp = NO_VAL;
 	} else {
 		error("%s: protocol_version %hu not supported", __func__,
 		      protocol_version);

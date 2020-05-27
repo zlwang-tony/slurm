@@ -13872,6 +13872,7 @@ static void _send_job_kill(job_record_t *job_ptr)
 		gres_plugin_epilog_build_env(job_ptr->gres_list,job_ptr->nodes);
 	kill_job->job_id    = job_ptr->job_id;
 	kill_job->het_job_id = job_ptr->het_job_id;
+	kill_job->step_het_comp = NO_VAL;
 	kill_job->step_id   = NO_VAL;
 	kill_job->job_state = job_ptr->job_state;
 	kill_job->job_uid   = job_ptr->user_id;
@@ -14289,6 +14290,7 @@ extern void abort_job_on_node(uint32_t job_id, job_record_t *job_ptr,
 
 	kill_req = xmalloc(sizeof(kill_job_msg_t));
 	kill_req->job_id	= job_id;
+	kill_req->step_het_comp = NO_VAL;
 	kill_req->step_id	= NO_VAL;
 	kill_req->time          = time(NULL);
 	kill_req->nodes		= xstrdup(node_name);
@@ -14382,6 +14384,7 @@ extern void abort_job_on_nodes(job_record_t *job_ptr,
 			gres_plugin_epilog_build_env(job_ptr->gres_list,
 						     job_ptr->nodes);
 		kill_req->job_id	= job_ptr->job_id;
+		kill_req->step_het_comp = NO_VAL;
 		kill_req->step_id	= NO_VAL;
 		kill_req->time          = time(NULL);
 		kill_req->nodes		= bitmap2node_name(tmp_node_bitmap);
@@ -14422,6 +14425,7 @@ extern void kill_job_on_node(job_record_t *job_ptr,
 		gres_plugin_epilog_build_env(job_ptr->gres_list,job_ptr->nodes);
 	kill_req->het_job_id	= job_ptr->het_job_id;
 	kill_req->job_id	= job_ptr->job_id;
+	kill_req->step_het_comp = NO_VAL;
 	kill_req->step_id	= NO_VAL;
 	kill_req->time          = time(NULL);
 	kill_req->start_time	= job_ptr->start_time;
