@@ -5665,6 +5665,7 @@ static void _signal_batch_job(job_record_t *job_ptr, uint16_t signal,
 	signal_tasks_msg = xmalloc(sizeof(signal_tasks_msg_t));
 	signal_tasks_msg->job_id      = job_ptr->job_id;
 	signal_tasks_msg->job_step_id = NO_VAL;
+	signal_tasks_msg->step_het_comp = NO_VAL;
 
 	signal_tasks_msg->flags = flags;
 	signal_tasks_msg->signal = signal;
@@ -15390,6 +15391,7 @@ static void _signal_job(job_record_t *job_ptr, int signal, uint16_t flags)
 	 * step_id to an impossible number.
 	 */
 	signal_job_msg->job_step_id = slurm_conf.max_step_cnt + 1;
+	signal_job_msg->step_het_comp = NO_VAL;
 
 	/*
 	 * Encode the flags for slurm stepd to know what steps get signaled

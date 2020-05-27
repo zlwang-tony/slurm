@@ -856,6 +856,7 @@ extern void slurm_step_launch_fwd_signal(slurm_step_ctx_t *ctx, int signo)
 	memset(&msg, 0, sizeof(msg));
 	msg.job_id      = ctx->job_id;
 	msg.job_step_id = ctx->step_resp->job_step_id;
+	msg.step_het_comp = ctx->step_req->step_het_comp;
 	msg.signal      = (uint16_t) signo;
 
 	slurm_mutex_lock(&sls->lock);

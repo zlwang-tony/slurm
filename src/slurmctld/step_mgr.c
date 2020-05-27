@@ -698,6 +698,7 @@ void signal_step_tasks(step_record_t *step_ptr, uint16_t signal,
 	signal_tasks_msg = xmalloc(sizeof(signal_tasks_msg_t));
 	signal_tasks_msg->job_id      = step_ptr->job_ptr->job_id;
 	signal_tasks_msg->job_step_id = step_ptr->step_id;
+	signal_tasks_msg->step_het_comp = step_ptr->step_het_comp;
 	signal_tasks_msg->signal      = signal;
 
 #ifdef HAVE_FRONT_END
@@ -778,6 +779,7 @@ void signal_step_tasks_on_node(char* node_name, step_record_t *step_ptr,
 	signal_tasks_msg = xmalloc(sizeof(signal_tasks_msg_t));
 	signal_tasks_msg->job_id      = step_ptr->job_ptr->job_id;
 	signal_tasks_msg->job_step_id = step_ptr->step_id;
+	signal_tasks_msg->step_het_comp = step_ptr->step_het_comp;
 	signal_tasks_msg->signal      = signal;
 	agent_args->msg_args = signal_tasks_msg;
 	agent_queue_request(agent_args);

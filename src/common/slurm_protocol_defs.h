@@ -699,6 +699,7 @@ typedef struct signal_tasks_msg {
 	uint32_t job_id;
 	uint32_t job_step_id;
 	uint16_t signal;
+	uint32_t step_het_comp;
 } signal_tasks_msg_t;
 
 typedef struct epilog_complete_msg {

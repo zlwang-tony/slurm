@@ -8264,6 +8264,7 @@ _pack_cancel_tasks_msg(signal_tasks_msg_t *msg, Buf buffer,
 		pack32(msg->job_id, buffer);
 		pack32(msg->job_step_id, buffer);
 		pack16(msg->signal, buffer);
+		pack32(msg->step_het_comp, buffer);
 	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		pack16(msg->flags, buffer);
 		pack32(msg->job_id, buffer);
@@ -8289,11 +8290,13 @@ _unpack_cancel_tasks_msg(signal_tasks_msg_t **msg_ptr, Buf buffer,
 		safe_unpack32(&msg->job_id, buffer);
 		safe_unpack32(&msg->job_step_id, buffer);
 		safe_unpack16(&msg->signal, buffer);
+		safe_unpack32(&msg->step_het_comp, buffer);
 	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		safe_unpack16(&msg->flags, buffer);
 		safe_unpack32(&msg->job_id, buffer);
 		safe_unpack32(&msg->job_step_id, buffer);
 		safe_unpack16(&msg->signal, buffer);
+		msg->step_het_comp = NO_VAL;
 	} else {
 		error("_unpack_cancel_tasks_msg: protocol_version "
 		      "%hu not supported", protocol_version);
