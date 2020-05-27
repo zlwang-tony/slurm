@@ -637,14 +637,7 @@ _send_exit_msg(stepd_step_rec_t *job, uint32_t *tid, int n, int status)
 		msg.return_code = status;
 	msg.job_id		= job->jobid;
 	msg.step_id		= job->stepid;
-	/*
-	 * Only set the step_het_comp if we are in a het step from a single
-	 * allocation
-	 */
-	if ((job->het_job_offset != NO_VAL) && (job->het_job_id == NO_VAL))
-		msg.step_het_comp = job->het_job_offset;
-	else
-		msg.step_het_comp = NO_VAL;
+	msg.step_het_comp       = job->step_het_comp;
 
 	slurm_msg_t_init(&resp);
 	resp.data		= &msg;
@@ -748,15 +741,7 @@ _one_step_complete_msg(stepd_step_rec_t *job, int first, int last)
 	memset(&msg, 0, sizeof(msg));
 	msg.job_id = job->jobid;
 	msg.job_step_id = job->stepid;
-
-	/*
-	 * Only set the step_het_comp if we are in a het step from a single
-	 * allocation
-	 */
-	if ((job->het_job_offset != NO_VAL) && (job->het_job_id == NO_VAL))
-		msg.step_het_comp = job->het_job_offset;
-	else
-		msg.step_het_comp = NO_VAL;
+	msg.step_het_comp = job->step_het_comp;
 
 	msg.range_first = first;
 	msg.range_last = last;
@@ -2452,14 +2437,7 @@ _send_launch_resp(stepd_step_rec_t *job, int rc)
 	resp.job_id		= job->jobid;
 	resp.step_id		= job->stepid;
 
-	/*
-	 * Only set the step_het_comp if we are in a het step from a single
-	 * allocation
-	 */
-	if ((job->het_job_offset != NO_VAL) && (job->het_job_id == NO_VAL))
-		resp.step_het_comp = job->het_job_offset;
-	else
-		resp.step_het_comp = NO_VAL;
+	resp.step_het_comp      = job->step_het_comp;
 
 	resp.node_name		= xstrdup(job->node_name);
 	resp.return_code	= rc;

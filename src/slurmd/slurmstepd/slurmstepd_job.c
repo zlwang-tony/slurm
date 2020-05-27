@@ -382,6 +382,16 @@ extern stepd_step_rec_t *stepd_step_rec_create(launch_tasks_request_msg_t *msg,
 	}
 	/* Used for env vars & labels */
 	job->het_job_offset = msg->het_job_offset;
+
+	/*
+	 * Only set the step_het_comp if we are in a het step from a single
+	 * allocation
+	 */
+	if ((job->het_job_offset != NO_VAL) && (job->het_job_id == NO_VAL))
+		job->step_het_comp = job->het_job_offset;
+	else
+		job->step_het_comp = NO_VAL;
+
 	/* Used for env vars & labels */
 	job->het_job_task_offset = msg->het_job_task_offset;
 	job->het_job_node_list = xstrdup(msg->het_job_node_list);
@@ -533,6 +543,7 @@ batch_stepd_step_rec_create(batch_job_launch_msg_t *msg)
 	job->ntasks  = msg->ntasks;
 	job->jobid   = msg->job_id;
 	job->stepid  = msg->step_id;
+	job->step_het_comp = NO_VAL;
 	job->array_job_id  = msg->array_job_id;
 	job->array_task_id = msg->array_task_id;
 	job->het_job_step_cnt = NO_VAL;
