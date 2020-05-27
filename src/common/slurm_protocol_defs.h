@@ -616,6 +616,7 @@ typedef struct job_user_id_msg {
 
 typedef struct job_step_id_msg {
 	uint32_t job_id;
+	uint32_t step_het_comp;
 	uint32_t step_id;
 } job_step_id_msg_t;
 
