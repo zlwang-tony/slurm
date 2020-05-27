@@ -101,6 +101,7 @@ typedef struct {
 	uint32_t nodeid;
 	uint16_t protocol_version;
 	uint32_t stepid;
+	uint32_t step_het_comp;
 	uint64_t step_mem_limit;	/* step's memory limit, MB */
 	uid_t uid;
 } slurmstepd_info_t;
@@ -125,6 +126,7 @@ typedef struct step_location {
 	char *nodename;
 	uint16_t protocol_version;
 	uint32_t stepid;
+	uint32_t step_het_comp;
 } step_loc_t;
 
 
@@ -148,7 +150,9 @@ int stepd_terminate(int fd, uint16_t protocol_version);
  * of the running stepd.
  */
 extern int stepd_connect(const char *directory, const char *nodename,
-		  uint32_t jobid, uint32_t stepid, uint16_t *protocol_version);
+			 uint32_t jobid, uint32_t stepid,
+			 uint32_t step_het_comp,
+			 uint16_t *protocol_version);
 
 /*
  * Retrieve a job step's current state.

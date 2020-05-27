@@ -154,14 +154,20 @@ static void _handle_stray_script(const char *directory, uint32_t job_id)
 
 static int
 _step_connect(const char *directory, const char *nodename,
-	      uint32_t jobid, uint32_t stepid)
+	      uint32_t jobid, uint32_t stepid, uint32_t step_het_comp)
 {
 	int fd;
 	int len;
 	struct sockaddr_un addr;
-	char *name = xstrdup_printf("%s/%s_%u.%u",
-				    directory, nodename, jobid, stepid);
+	char *name;
 
+	if (step_het_comp == NO_VAL)
+		name = xstrdup_printf("%s/%s_%u.%u",
+				      directory, nodename, jobid, stepid);
+	else
+		name = xstrdup_printf("%s/%s_%u.%u.%u",
+				      directory, nodename, jobid, stepid,
+				      step_het_comp);
 	/*
 	 * If socket name would be truncated, emit error and exit
 	 */
@@ -174,8 +180,8 @@ _step_connect(const char *directory, const char *nodename,
 	}
 
 	if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
-		error("%s: socket() failed dir %s node %s job %u step %u %m",
-		      __func__, directory, nodename, jobid, stepid);
+		error("%s: socket() failed for %s: %m",
+		      __func__, name);
 		xfree(name);
 		return -1;
 	}
@@ -187,8 +193,8 @@ _step_connect(const char *directory, const char *nodename,
 
 	if (connect(fd, (struct sockaddr *) &addr, len) < 0) {
 		/* Can indicate race condition at step termination */
-		debug("%s: connect() failed dir %s node %s step %u.%u %m",
-		      __func__, directory, nodename, jobid, stepid);
+		debug("%s: connect() failed for %s: %m",
+		      __func__, name);
 		if (errno == ECONNREFUSED && running_in_slurmd()) {
 			_handle_stray_socket(name);
 			if (stepid == SLURM_BATCH_SCRIPT)
@@ -235,6 +241,7 @@ _guess_nodename(void)
  */
 extern int stepd_connect(const char *directory, const char *nodename,
 			 uint32_t jobid, uint32_t stepid,
+			 uint32_t step_het_comp,
 			 uint16_t *protocol_version)
 {
 	int req = SLURM_PROTOCOL_VERSION;
@@ -257,7 +264,7 @@ extern int stepd_connect(const char *directory, const char *nodename,
 	}
 
 	/* Connect to the step */
-	fd = _step_connect(directory, nodename, jobid, stepid);
+	fd = _step_connect(directory, nodename, jobid, stepid, step_het_comp);
 	if (fd == -1)
 		goto fail1;
 
@@ -315,6 +322,7 @@ slurmstepd_info_t *stepd_get_info(int fd)
 		safe_read(fd, &step_info->nodeid, sizeof(uint32_t));
 		safe_read(fd, &step_info->job_mem_limit, sizeof(uint64_t));
 		safe_read(fd, &step_info->step_mem_limit, sizeof(uint64_t));
+		safe_read(fd, &step_info->step_het_comp, sizeof(uint32_t));
 	} else if (step_info->protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		safe_read(fd, &step_info->nodeid, sizeof(uint32_t));
 		safe_read(fd, &step_info->job_mem_limit, sizeof(uint64_t));
@@ -462,7 +470,8 @@ _sockname_regex_init(regex_t *re, const char *nodename)
 
 	xstrcat(pattern, "^");
 	xstrcat(pattern, nodename);
-	xstrcat(pattern, "_([[:digit:]]*)\\.([[:digit:]]*)$");
+	xstrcat(pattern,
+		"_([[:digit:]]*)\\.([[:digit:]]*)\\.{0,1}([[:digit:]]*)$");
 
 	if (regcomp(re, pattern, REG_EXTENDED) != 0) {
 		error("sockname regex compilation failed");
@@ -476,11 +485,12 @@ _sockname_regex_init(regex_t *re, const char *nodename)
 
 static int
 _sockname_regex(regex_t *re, const char *filename,
-		uint32_t *jobid, uint32_t *stepid)
+		uint32_t *jobid, uint32_t *stepid, uint32_t *step_het_comp)
 {
 	size_t nmatch = 5;
 	regmatch_t pmatch[5];
 	char *match;
+	size_t my_size;
 
 	memset(pmatch, 0, sizeof(regmatch_t)*nmatch);
 	if (regexec(re, filename, nmatch, pmatch, 0) == REG_NOMATCH) {
@@ -497,6 +507,13 @@ _sockname_regex(regex_t *re, const char *filename,
 	*stepid = (uint32_t)atoll(match);
 	xfree(match);
 
+	/* If we have a size here we have a het_comp */
+	if ((my_size = pmatch[3].rm_eo - pmatch[3].rm_so)) {
+		match = xstrndup(filename + pmatch[3].rm_so, my_size);
+		*step_het_comp = slurm_atoul(match);
+		xfree(match);
+	} else
+		*step_het_comp = NO_VAL;
 	return 0;
 }
 
@@ -555,15 +572,18 @@ stepd_available(const char *directory, const char *nodename)
 
 	while ((ent = readdir(dp)) != NULL) {
 		step_loc_t *loc;
-		uint32_t jobid, stepid;
+		uint32_t jobid, stepid, het_comp = NO_VAL;
 
-		if (_sockname_regex(&re, ent->d_name, &jobid, &stepid) == 0) {
-			debug4("found jobid = %u, stepid = %u", jobid, stepid);
+		if (_sockname_regex(&re, ent->d_name, &jobid, &stepid,
+				    &het_comp) == 0) {
+			debug4("found jobid = %u, stepid = %u het_comp = %u",
+			       jobid, stepid, het_comp);
 			loc = xmalloc(sizeof(step_loc_t));
 			loc->directory = xstrdup(directory);
 			loc->nodename = xstrdup(nodename);
 			loc->jobid = jobid;
 			loc->stepid = stepid;
+			loc->step_het_comp = het_comp;
 			list_append(l, (void *)loc);
 		}
 	}
@@ -607,8 +627,9 @@ stepd_cleanup_sockets(const char *directory, const char *nodename)
 	}
 
 	while ((ent = readdir(dp)) != NULL) {
-		uint32_t jobid, stepid;
-		if (_sockname_regex(&re, ent->d_name, &jobid, &stepid) == 0) {
+		uint32_t jobid, stepid, het_comp = NO_VAL;
+		if (_sockname_regex(&re, ent->d_name, &jobid, &stepid,
+				    &het_comp) == 0) {
 			char *path;
 			int fd;
 			uint16_t protocol_version;
@@ -621,7 +642,8 @@ stepd_cleanup_sockets(const char *directory, const char *nodename)
 			/* signal the slurmstepd to terminate its step */
 			fd = stepd_connect((char *) directory,
 					   (char *) nodename,
-					   jobid, stepid, &protocol_version);
+					   jobid, stepid, het_comp,
+					   &protocol_version);
 			if (fd == -1) {
 				debug("Unable to connect to socket %s", path);
 			} else {
@@ -1084,8 +1106,13 @@ stepd_stat_jobacct(int fd, uint16_t protocol_version,
 	if (!(resp->jobacct = jobacctinfo_create(NULL)))
 		return rc;
 
-	debug("Entering stepd_stat_jobacct for job %u.%u",
-	      sent->job_id, sent->step_id);
+	if (sent->step_het_comp == NO_VAL)
+		debug("Entering %s for job %u.%u",
+		      __func__, sent->job_id, sent->step_id);
+	else
+		debug("Entering %s for job %u.%u+%u",
+		      __func__, sent->job_id, sent->step_id,
+		      sent->step_het_comp);
 
 	safe_write(fd, &req, sizeof(int));
 

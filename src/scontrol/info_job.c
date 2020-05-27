@@ -527,10 +527,12 @@ static int _parse_jobid(const char *jobid_str, uint32_t *out_jobid)
 }
 
 /* Return 1 on success, 0 on failure to find a stepid in the string */
-static int _parse_stepid(const char *jobid_str, uint32_t *out_stepid)
+static int _parse_stepid(const char *jobid_str, uint32_t *out_stepid,
+			 uint32_t *out_het_comp)
 {
 	char *ptr, *job, *step;
 	long stepid;
+	uint32_t het_comp = NO_VAL;
 
 	job = xstrdup(jobid_str);
 	ptr = xstrchr(job, '.');
@@ -543,13 +545,24 @@ static int _parse_stepid(const char *jobid_str, uint32_t *out_stepid)
 	}
 
 	stepid = strtol(step, &ptr, 10);
+
+	step = xstrchr(ptr, '+');
+	if (step) {
+		/* het step */
+		step++;
+		het_comp = (uint32_t)strtol(step, &ptr, 10);
+	}
+
 	if (!xstring_is_whitespace(ptr)) {
-		fprintf(stderr, "\"%s\" does not look like a stepid\n", step);
+		fprintf(stderr, "\"%s\" does not look like a stepid\n",
+			jobid_str);
 		xfree(job);
 		return 0;
 	}
 
 	*out_stepid = (uint32_t) stepid;
+	*out_het_comp = het_comp;
+
 	xfree(job);
 	return 1;
 }
@@ -571,7 +584,8 @@ _in_task_array(pid_t pid, slurmstepd_task_info_t *task_array,
 
 
 static void
-_list_pids_one_step(const char *node_name, uint32_t jobid, uint32_t stepid)
+_list_pids_one_step(const char *node_name, uint32_t jobid, uint32_t stepid,
+		    uint32_t step_het_comp)
 {
 	int fd;
 	slurmstepd_task_info_t *task_info = NULL;
@@ -581,7 +595,8 @@ _list_pids_one_step(const char *node_name, uint32_t jobid, uint32_t stepid)
 	int i;
 	uint16_t protocol_version;
 
-	fd = stepd_connect(NULL, node_name, jobid, stepid, &protocol_version);
+	fd = stepd_connect(NULL, node_name, jobid, stepid, step_het_comp,
+			   &protocol_version);
 	if (fd == -1) {
 		exit_code = 1;
 		if (errno == ENOENT) {
@@ -652,7 +667,8 @@ _list_pids_all_steps(const char *node_name, uint32_t jobid)
 	while ((stepd = list_next(itr))) {
 		if (jobid == stepd->jobid) {
 			_list_pids_one_step(stepd->nodename, stepd->jobid,
-					    stepd->stepid);
+					    stepd->stepid,
+					    stepd->step_het_comp);
 			count++;
 		}
 	}
@@ -684,7 +700,7 @@ _list_pids_all_jobs(const char *node_name)
 	itr = list_iterator_create(steps);
 	while((stepd = list_next(itr))) {
 		_list_pids_one_step(stepd->nodename, stepd->jobid,
-				    stepd->stepid);
+				    stepd->stepid, stepd->step_het_comp);
 	}
 	list_iterator_destroy(itr);
 	FREE_NULL_LIST(steps);
@@ -704,7 +720,7 @@ _list_pids_all_jobs(const char *node_name)
 extern void
 scontrol_list_pids(const char *jobid_str, const char *node_name)
 {
-	uint32_t jobid = 0, stepid = 0;
+	uint32_t jobid = 0, stepid = 0, het_comp = NO_VAL;
 
 	/* Job ID is optional */
 	if (jobid_str != NULL
@@ -714,13 +730,13 @@ scontrol_list_pids(const char *jobid_str, const char *node_name)
 		return;
 	}
 
-	/* Step ID is optional */
+	/* Step ID and het_comp are optional */
 	printf("%-8s %-8s %-6s %-7s %-8s\n",
 	       "PID", "JOBID", "STEPID", "LOCALID", "GLOBALID");
 	if (jobid_str == NULL || jobid_str[0] == '*') {
 		_list_pids_all_jobs(node_name);
-	} else if (_parse_stepid(jobid_str, &stepid)) {
-		_list_pids_one_step(node_name, jobid, stepid);
+	} else if (_parse_stepid(jobid_str, &stepid, &het_comp)) {
+		_list_pids_one_step(node_name, jobid, stepid, het_comp);
 	} else {
 		_list_pids_all_steps(node_name, jobid);
 	}
@@ -744,6 +760,7 @@ extern void scontrol_getent(const char *node_name)
 	while ((stepd = list_next(itr))) {
 		fd = stepd_connect(NULL, node_name, stepd->jobid,
 				   stepd->stepid,
+				   stepd->step_het_comp,
 				   &stepd->protocol_version);
 
 		if (fd < 0)

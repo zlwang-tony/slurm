@@ -939,7 +939,7 @@ static void _setup_x11_display(uint32_t job_id, uint32_t step_id,
 	uint16_t protocol_version;
 
 	fd = stepd_connect(conf->spooldir, conf->node_name,
-			   job_id, SLURM_EXTERN_CONT,
+			   job_id, SLURM_EXTERN_CONT, NO_VAL,
 			   &protocol_version);
 
 	if (fd == -1) {
@@ -2633,6 +2633,7 @@ _rpc_job_notify(slurm_msg_t *msg)
 
 		fd = stepd_connect(stepd->directory, stepd->nodename,
 				   stepd->jobid, stepd->stepid,
+				   stepd->step_het_comp,
 				   &stepd->protocol_version);
 		if (fd == -1) {
 			debug3("Unable to connect to step %u.%u",
@@ -2919,6 +2920,7 @@ _load_job_limits(void)
 			continue;
 		fd = stepd_connect(stepd->directory, stepd->nodename,
 				   stepd->jobid, stepd->stepid,
+				   stepd->step_het_comp,
 				   &stepd->protocol_version);
 		if (fd == -1)
 			continue;	/* step completed */
@@ -3064,11 +3066,13 @@ _enforce_job_mem_limit(void)
 
 		fd = stepd_connect(stepd->directory, stepd->nodename,
 				   stepd->jobid, stepd->stepid,
+				   stepd->step_het_comp,
 				   &stepd->protocol_version);
 		if (fd == -1)
 			continue;	/* step completed */
 		acct_req.job_id  = stepd->jobid;
 		acct_req.step_id = stepd->stepid;
+		acct_req.step_het_comp = stepd->step_het_comp;
 		resp = xmalloc(sizeof(job_step_stat_t));
 
 		if ((!stepd_stat_jobacct(
@@ -3355,8 +3359,8 @@ _rpc_acct_gather_energy(slurm_msg_t *msg)
 }
 
 static int
-_signal_jobstep(uint32_t jobid, uint32_t stepid, uint16_t signal,
-		uint16_t flags, uid_t req_uid)
+_signal_jobstep(uint32_t jobid, uint32_t stepid, uint32_t step_het_comp,
+		uint16_t signal, uint16_t flags, uid_t req_uid)
 {
 	int fd, rc = SLURM_SUCCESS;
 	uint16_t protocol_version;
@@ -3372,7 +3376,7 @@ _signal_jobstep(uint32_t jobid, uint32_t stepid, uint16_t signal,
 	}
 
 	fd = stepd_connect(conf->spooldir, conf->node_name, jobid, stepid,
-			   &protocol_version);
+			   step_het_comp, &protocol_version);
 	if (fd == -1) {
 		debug("signal for nonexistent %u.%u stepd_connect failed: %m",
 		      jobid, stepid);
@@ -3424,9 +3428,19 @@ _rpc_signal_tasks(slurm_msg_t *msg)
 		_kill_all_active_steps(req->job_id, req->signal,
 				       req->flags, false, req_uid);
 	} else {
-		debug("%s: sending signal %u to step %u.%u flag %u", __func__,
-		      req->signal, req->job_id, req->job_step_id, req->flags);
+		if (req->step_het_comp == NO_VAL)
+			debug("%s: sending signal %u to step %u.%u flag %u",
+			      __func__,
+			      req->signal, req->job_id, req->job_step_id,
+			      req->flags);
+		else
+			debug("%s: sending signal %u to step %u.%u+%u flag %u",
+			      __func__,
+			      req->signal, req->job_id, req->job_step_id,
+			      req->step_het_comp, req->flags);
+
 		rc = _signal_jobstep(req->job_id, req->job_step_id,
+				     req->step_het_comp,
 				     req->signal, req->flags, req_uid);
 	}
 done:
@@ -3445,7 +3459,8 @@ _rpc_terminate_tasks(slurm_msg_t *msg)
 
 	debug3("Entering _rpc_terminate_tasks");
 	fd = stepd_connect(conf->spooldir, conf->node_name,
-			   req->job_id, req->job_step_id, &protocol_version);
+			   req->job_id, req->job_step_id, req->step_het_comp,
+			   &protocol_version);
 	if (fd == -1) {
 		debug("kill for nonexistent job %u.%u stepd_connect "
 		      "failed: %m", req->job_id, req->job_step_id);
@@ -3490,7 +3505,8 @@ _rpc_step_complete(slurm_msg_t *msg)
 
 	debug3("Entering _rpc_step_complete");
 	fd = stepd_connect(conf->spooldir, conf->node_name,
-			   req->job_id, req->job_step_id, &protocol_version);
+			   req->job_id, req->job_step_id, req->step_het_comp,
+			   &protocol_version);
 	if (fd == -1) {
 		error("stepd_connect to %u.%u failed: %m",
 		      req->job_id, req->job_step_id);
@@ -3585,6 +3601,7 @@ _get_step_list(void)
 		int fd;
 		fd = stepd_connect(stepd->directory, stepd->nodename,
 				   stepd->jobid, stepd->stepid,
+				   stepd->step_het_comp,
 				   &stepd->protocol_version);
 		if (fd == -1)
 			continue;
@@ -3665,7 +3682,8 @@ _rpc_stat_jobacct(slurm_msg_t *msg)
 	   so only root or SlurmUser is allowed here */
 
 	fd = stepd_connect(conf->spooldir, conf->node_name,
-			   req->job_id, req->step_id, &protocol_version);
+			   req->job_id, req->step_id, req->step_het_comp,
+			   &protocol_version);
 	if (fd == -1) {
 		error("stepd_connect to %u.%u failed: %m",
 		      req->job_id, req->step_id);
@@ -3864,7 +3882,8 @@ _rpc_list_pids(slurm_msg_t *msg)
 	resp->pid_cnt = 0;
 	resp->pid = NULL;
 	fd = stepd_connect(conf->spooldir, conf->node_name,
-			   req->job_id, req->step_id, &protocol_version);
+			   req->job_id, req->step_id, req->step_het_comp,
+			   &protocol_version);
 	if (fd == -1) {
 		error("stepd_connect to %u.%u failed: %m",
 		      req->job_id, req->step_id);
@@ -3928,26 +3947,32 @@ _rpc_timelimit(slurm_msg_t *msg)
 		 */
 		if (msg->msg_type == REQUEST_KILL_TIMELIMIT) {
 			rc = _signal_jobstep(req->job_id, req->step_id,
+					     req->step_het_comp,
 					     SIG_TIME_LIMIT, 0, uid);
 		} else {
 			rc = _signal_jobstep(req->job_id, req->step_id,
+					     req->step_het_comp,
 					     SIG_PREEMPTED, 0, uid);
 		}
 		if (rc != SLURM_SUCCESS)
 			return;
-		rc = _signal_jobstep(req->job_id, req->step_id, SIGCONT, 0,
-				     uid);
+		rc = _signal_jobstep(req->job_id, req->step_id,
+				     req->step_het_comp,
+				     SIGCONT, 0, uid);
 		if (rc != SLURM_SUCCESS)
 			return;
-		rc = _signal_jobstep(req->job_id, req->step_id, SIGTERM, 0,
-				     uid);
+		rc = _signal_jobstep(req->job_id, req->step_id,
+				     req->step_het_comp,
+				     SIGTERM, 0, uid);
 		if (rc != SLURM_SUCCESS)
 			return;
 		cf = slurm_conf_lock();
 		delay = MAX(cf->kill_wait, 5);
 		slurm_conf_unlock();
 		sleep(delay);
-		_signal_jobstep(req->job_id, req->step_id, SIGKILL, 0, uid);
+		_signal_jobstep(req->job_id, req->step_id,
+				req->step_het_comp,
+				SIGKILL, 0, uid);
 		return;
 	}
 
@@ -3981,6 +4006,7 @@ static void  _rpc_pid2jid(slurm_msg_t *msg)
 		int fd;
 		fd = stepd_connect(stepd->directory, stepd->nodename,
 				   stepd->jobid, stepd->stepid,
+				   stepd->step_het_comp,
 				   &stepd->protocol_version);
 		if (fd == -1)
 			continue;
@@ -4375,7 +4401,8 @@ _rpc_reattach_tasks(slurm_msg_t *msg)
 
 	slurm_msg_t_copy(&resp_msg, msg);
 	fd = stepd_connect(conf->spooldir, conf->node_name,
-			   req->job_id, req->job_step_id, &protocol_version);
+			   req->job_id, req->job_step_id, req->step_het_comp,
+			   &protocol_version);
 	if (fd == -1) {
 		debug("reattach for nonexistent job %u.%u stepd_connect"
 		      " failed: %m", req->job_id, req->job_step_id);
@@ -4482,6 +4509,7 @@ static uid_t _get_job_uid(uint32_t jobid)
 		}
 		fd = stepd_connect(stepd->directory, stepd->nodename,
 				   stepd->jobid, stepd->stepid,
+				   stepd->step_het_comp,
 				   &stepd->protocol_version);
 		if (fd == -1) {
 			debug3("Unable to connect to step %u.%u",
@@ -4543,7 +4571,8 @@ _kill_all_active_steps(uint32_t jobid, int sig, int flags, bool batch,
 
 		if ((sig_all_steps && (stepd->stepid != SLURM_BATCH_SCRIPT)) ||
 		    (sig_batch_step && (stepd->stepid == SLURM_BATCH_SCRIPT))) {
-			if (_signal_jobstep(stepd->jobid, stepd->stepid, sig,
+			if (_signal_jobstep(stepd->jobid, stepd->stepid,
+					    stepd->step_het_comp, sig,
 			                    flags, req_uid) != SLURM_SUCCESS) {
 				rc = SLURM_ERROR;
 				continue;
@@ -4587,6 +4616,7 @@ extern int ume_notify(void)
 
 		fd = stepd_connect(stepd->directory, stepd->nodename,
 				   stepd->jobid, stepd->stepid,
+				   stepd->step_het_comp,
 				   &stepd->protocol_version);
 		if (fd == -1) {
 			debug3("Unable to connect to step %u.%u",
@@ -4641,6 +4671,7 @@ _terminate_all_steps(uint32_t jobid, bool batch)
 
 		fd = stepd_connect(stepd->directory, stepd->nodename,
 				   stepd->jobid, stepd->stepid,
+				   stepd->step_het_comp,
 				   &stepd->protocol_version);
 		if (fd == -1) {
 			debug3("Unable to connect to step %u.%u",
@@ -4676,6 +4707,7 @@ _job_still_running(uint32_t job_id)
 			int fd;
 			fd = stepd_connect(s->directory, s->nodename,
 					   s->jobid, s->stepid,
+					   s->step_het_comp,
 					   &s->protocol_version);
 			if (fd == -1)
 				continue;
@@ -4729,6 +4761,7 @@ _steps_completed_now(uint32_t jobid)
 			int fd;
 			fd = stepd_connect(stepd->directory, stepd->nodename,
 					   stepd->jobid, stepd->stepid,
+					   stepd->step_het_comp,
 					   &stepd->protocol_version);
 			if (fd == -1)
 				continue;
@@ -4966,6 +4999,7 @@ _rpc_suspend_job(slurm_msg_t *msg)
 			fd[fdi] = stepd_connect(stepd->directory,
 						stepd->nodename, stepd->jobid,
 						stepd->stepid,
+						stepd->step_het_comp,
 						&protocol_version[fdi]);
 			if (fd[fdi] == -1) {
 				debug3("Unable to connect to step %u.%u",

@@ -804,6 +804,7 @@ _fill_registration_msg(slurm_node_registration_status_msg_t *msg)
 		int fd;
 		fd = stepd_connect(stepd->directory, stepd->nodename,
 				   stepd->jobid, stepd->stepid,
+				   stepd->step_het_comp,
 				   &stepd->protocol_version);
 		if (fd == -1) {
 			--(msg->job_count);
@@ -2183,6 +2184,7 @@ static void _update_logging(void)
 		int fd;
 		fd = stepd_connect(stepd->directory, stepd->nodename,
 				   stepd->jobid, stepd->stepid,
+				   stepd->step_het_comp,
 				   &stepd->protocol_version);
 		if (fd == -1)
 			continue;

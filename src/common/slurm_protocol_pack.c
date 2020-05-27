@@ -7382,6 +7382,7 @@ _pack_reattach_tasks_request_msg(reattach_tasks_request_msg_t * msg,
 		for (i = 0; i < msg->num_io_port; i++)
 			pack16((uint16_t)msg->io_port[i], buffer);
 		slurm_cred_pack(msg->cred, buffer, protocol_version);
+		pack32(msg->step_het_comp, buffer);
 	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		pack32((uint32_t)msg->job_id, buffer);
 		pack32((uint32_t)msg->job_step_id, buffer);
@@ -7434,6 +7435,7 @@ _unpack_reattach_tasks_request_msg(reattach_tasks_request_msg_t ** msg_ptr,
 
 		if (!(msg->cred = slurm_cred_unpack(buffer, protocol_version)))
 			goto unpack_error;
+		safe_unpack32(&msg->step_het_comp, buffer);
 	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		safe_unpack32(&msg->job_id, buffer);
 		safe_unpack32(&msg->job_step_id, buffer);
@@ -7458,6 +7460,7 @@ _unpack_reattach_tasks_request_msg(reattach_tasks_request_msg_t ** msg_ptr,
 
 		if (!(msg->cred = slurm_cred_unpack(buffer, protocol_version)))
 			goto unpack_error;
+		msg->step_het_comp = NO_VAL;
 	} else {
 		error("%s: protocol_version %hu not supported",
 		      __func__, protocol_version);

@@ -142,6 +142,7 @@ static struct passwd *_pw_internal(int mode, uid_t uid, const char *name)
         while ((stepd = list_next(itr))) {
 		fd = stepd_connect(stepd->directory, stepd->nodename,
 				   stepd->jobid, stepd->stepid,
+				   stepd->step_het_comp,
 				   &stepd->protocol_version);
 
 		if (fd < 0)
@@ -274,6 +275,7 @@ static struct group **_gr_internal(int mode, gid_t gid, const char *name)
         while ((stepd = list_next(itr))) {
 		fd = stepd_connect(stepd->directory, stepd->nodename,
 				   stepd->jobid, stepd->stepid,
+				   stepd->step_het_comp,
 				   &stepd->protocol_version);
 
 		if (fd < 0)

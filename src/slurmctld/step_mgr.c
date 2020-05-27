@@ -4710,6 +4710,7 @@ extern step_record_t *build_extern_step(job_record_t *job_ptr)
 	step_ptr->state = JOB_RUNNING;
 	step_ptr->start_time = job_ptr->start_time;
 	step_ptr->step_id = SLURM_EXTERN_CONT;
+	step_ptr->step_het_comp = NO_VAL;
 	if (job_ptr->node_bitmap)
 		step_ptr->step_node_bitmap =
 			bit_copy(job_ptr->node_bitmap);
@@ -4746,6 +4747,7 @@ extern step_record_t *build_batch_step(job_record_t *job_ptr_in)
 	step_ptr->state = JOB_RUNNING;
 	step_ptr->start_time = job_ptr->start_time;
 	step_ptr->step_id = SLURM_BATCH_SCRIPT;
+	step_ptr->step_het_comp = NO_VAL;
 	step_ptr->batch_step = 1;
 
 	if (node_name2bitmap(job_ptr->batch_host, false,

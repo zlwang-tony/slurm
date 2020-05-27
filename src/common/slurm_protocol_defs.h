@@ -1008,6 +1008,7 @@ typedef struct reattach_tasks_request_msg {
 	slurm_cred_t *cred;      /* used only a weak authentication mechanism
 				   for the slurmstepd to use when connecting
 				   back to the client */
+	uint32_t     step_het_comp;
 } reattach_tasks_request_msg_t;
 
 typedef struct reattach_tasks_response_msg {

@@ -125,7 +125,9 @@ static int _adopt_process(pam_handle_t *pamh, pid_t pid, step_loc_t *stepd)
 	debug("_adopt_process: trying to get %u.%u to adopt %d",
 	      stepd->jobid, stepd->stepid, pid);
 	fd = stepd_connect(stepd->directory, stepd->nodename,
-			   stepd->jobid, stepd->stepid, &protocol_version);
+			   stepd->jobid, stepd->stepid,
+			   stepd->step_het_comp,
+			   &protocol_version);
 	if (fd < 0) {
 		/* It's normal for a step to exit */
 		debug3("unable to connect to step %u.%u on %s: %m",
@@ -184,6 +186,7 @@ static uid_t _get_job_uid(step_loc_t *stepd)
 
 	fd = stepd_connect(stepd->directory, stepd->nodename,
 			   stepd->jobid, stepd->stepid,
+			   stepd->step_het_comp,
 			   &stepd->protocol_version);
 	if (fd < 0) {
 		/* It's normal for a step to exit */
