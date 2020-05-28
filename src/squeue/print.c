@@ -2367,14 +2367,14 @@ int _print_step_id(job_step_info_t * step, int width, bool right, char* suffix)
 	if (step == NULL) {	/* Print the Header instead */
 		_print_str("STEPID", width, right, true);
 	} else {
-		char *out = NULL;
+		char *out = NULL, *pos = NULL;
 
 		if (step->array_job_id)
-			xstrfmtcat(out, "%u_%u.",
-				   step->array_job_id,
-				   step->array_task_id);
+			xstrfmtcatat(out, &pos, "%u_%u.",
+				     step->array_job_id,
+				     step->array_task_id);
 		else
-			xstrfmtcat(out, "%u.", step->job_id);
+			xstrfmtcatat(out, &pos, "%u.", step->job_id);
 
 		if (step->step_id == SLURM_PENDING_STEP)
 			xstrcat(out, "TBD");
@@ -2383,11 +2383,11 @@ int _print_step_id(job_step_info_t * step, int width, bool right, char* suffix)
 		else if (step->step_id == SLURM_EXTERN_CONT)
 			xstrcat(out, "extern");
 		else if (step->step_het_comp == NO_VAL)
-			xstrfmtcat(out, "%u", step->step_id);
+			xstrfmtcatat(out, &pos, "%u", step->step_id);
 		else
-			xstrfmtcat(out, "%u+%u",
-				   step->step_id,
-				   step->step_het_comp);
+			xstrfmtcatat(out, &pos, "%u+%u",
+				     step->step_id,
+				     step->step_het_comp);
 
 		_print_str(out, width, right, true);
 		xfree(out);
