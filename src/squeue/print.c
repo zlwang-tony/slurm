@@ -2382,8 +2382,12 @@ int _print_step_id(job_step_info_t * step, int width, bool right, char* suffix)
 			xstrcat(out, "batch");
 		else if (step->step_id == SLURM_EXTERN_CONT)
 			xstrcat(out, "extern");
-		else
+		else if (step->step_het_comp == NO_VAL)
 			xstrfmtcat(out, "%u", step->step_id);
+		else
+			xstrfmtcat(out, "%u+%u",
+				   step->step_id,
+				   step->step_het_comp);
 
 		_print_str(out, width, right, true);
 		xfree(out);
