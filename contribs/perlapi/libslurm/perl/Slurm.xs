@@ -1347,7 +1347,7 @@ slurm_sprint_job_step_info(slurm_t self, HV *step_info, int one_liner=0)
 		RETVAL
 
 HV *
-slurm_job_step_layout_get(slurm_t self, uint32_t job_id, uint32_t step_id)
+slurm_job_step_layout_get(slurm_t self, uint32_t job_id, uint32_t step_id, uint32_t step_het_comp=NO_VAL)
 	PREINIT:
 		int rc;
 		slurm_step_layout_t *layout;
@@ -1357,7 +1357,8 @@ slurm_job_step_layout_get(slurm_t self, uint32_t job_id, uint32_t step_id)
 			      out of the mix Slurm-> doesn't work,
 			      only Slurm::
 			    */
-		layout = slurm_job_step_layout_get(job_id, step_id);
+		layout = slurm_job_step_layout_get(job_id, step_id,
+						   step_het_comp);
 		if(layout == NULL) {
 			XSRETURN_UNDEF;
 		} else {
@@ -1373,7 +1374,7 @@ slurm_job_step_layout_get(slurm_t self, uint32_t job_id, uint32_t step_id)
 		RETVAL
 
 HV *
-slurm_job_step_stat(slurm_t self, uint32_t job_id, uint32_t step_id, char *nodelist=NULL, uint16_t protocol_version)
+slurm_job_step_stat(slurm_t self, uint32_t job_id, uint32_t step_id, uint32_t step_het_comp=NO_VAL, char *nodelist=NULL, uint16_t protocol_version)
 	PREINIT:
 		int rc;
 		job_step_stat_response_msg_t *resp_msg;
@@ -1383,8 +1384,8 @@ slurm_job_step_stat(slurm_t self, uint32_t job_id, uint32_t step_id, char *nodel
 			      out of the mix Slurm-> doesn't work,
 			      only Slurm::
 			    */
-                rc = slurm_job_step_stat(job_id, step_id, nodelist,
-					 protocol_version, &resp_msg);
+		rc = slurm_job_step_stat(job_id, step_id, step_het_comp,
+					 nodelist, protocol_version, &resp_msg);
 		if (rc == SLURM_SUCCESS) {
 			RETVAL = newHV();
 			sv_2mortal((SV*)RETVAL);
@@ -1401,7 +1402,7 @@ slurm_job_step_stat(slurm_t self, uint32_t job_id, uint32_t step_id, char *nodel
 		RETVAL
 
 HV *
-slurm_job_step_get_pids(slurm_t self, uint32_t job_id, uint32_t step_id, char *nodelist=NULL)
+slurm_job_step_get_pids(slurm_t self, uint32_t job_id, uint32_t step_id, uint32_t step_het_comp=NO_VAL, char *nodelist=NULL)
 	PREINIT:
 		int rc;
 		job_step_pids_response_msg_t *resp_msg = NULL;
@@ -1411,7 +1412,9 @@ slurm_job_step_get_pids(slurm_t self, uint32_t job_id, uint32_t step_id, char *n
 			      out of the mix Slurm-> doesn't work,
 			      only Slurm::
 			    */
-		rc = slurm_job_step_get_pids(job_id, step_id, nodelist, &resp_msg);
+		rc = slurm_job_step_get_pids(job_id, step_id,
+					     step_het_comp, nodelist,
+					     &resp_msg);
 		if (rc == SLURM_SUCCESS) {
 			RETVAL = newHV();
 			sv_2mortal((SV*)RETVAL);

@@ -146,7 +146,8 @@ int sattach(int argc, char **argv)
 		exit(error_exit);
 	}
 
-	layout = slurm_job_step_layout_get(opt.jobid, opt.stepid);
+	/* FIXME: this does not work with hetsteps */
+	layout = slurm_job_step_layout_get(opt.jobid, opt.stepid, NO_VAL);
 	if (layout == NULL) {
 		error("Could not get job step info: %m");
 		exit(error_exit);

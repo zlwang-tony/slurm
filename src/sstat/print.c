@@ -252,10 +252,15 @@ void print_fields(slurmdb_step_rec_t *step)
 			else if (step->stepid == SLURM_EXTERN_CONT)
 				snprintf(outbuf, sizeof(outbuf), "%u.extern",
 					 step->job_ptr->jobid);
-			else
+			else if (step->step_het_comp == NO_VAL)
 				snprintf(outbuf, sizeof(outbuf), "%u.%u",
 					 step->job_ptr->jobid,
 					 step->stepid);
+			else
+				snprintf(outbuf, sizeof(outbuf), "%u.%u+%u",
+					 step->job_ptr->jobid,
+					 step->stepid,
+					 step->step_het_comp);
 
 			field->print_routine(field,
 					     outbuf,

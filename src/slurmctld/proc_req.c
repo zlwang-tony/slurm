@@ -3907,7 +3907,7 @@ static void _slurm_rpc_step_layout(slurm_msg_t *msg)
 		return;
 	}
 
-	step_ptr = find_step_record(job_ptr, req->step_id, NO_VAL);
+	step_ptr = find_step_record(job_ptr, req->step_id, req->step_het_comp);
 	if (!step_ptr) {
 		unlock_slurmctld(job_read_lock);
 		log_flag(STEPS, "%s: %pJ StepId=%u Not Found",

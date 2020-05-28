@@ -518,7 +518,8 @@ slurm_get_job_steps (time_t update_time, uint32_t job_id, uint32_t step_id,
 }
 
 extern slurm_step_layout_t *
-slurm_job_step_layout_get(uint32_t job_id, uint32_t step_id)
+slurm_job_step_layout_get(uint32_t job_id, uint32_t step_id,
+			  uint32_t step_het_comp)
 {
 	job_step_id_msg_t data;
 	slurm_msg_t req, resp;
@@ -532,6 +533,7 @@ slurm_job_step_layout_get(uint32_t job_id, uint32_t step_id)
 	memset(&data, 0, sizeof(data));
 	data.job_id = job_id;
 	data.step_id = step_id;
+	data.step_het_comp = step_het_comp;
 
 	if (slurm_send_recv_controller_msg(&req, &resp, working_cluster_rec) <0)
 		return NULL;
@@ -561,6 +563,7 @@ slurm_job_step_layout_get(uint32_t job_id, uint32_t step_id)
  * RET SLURM_SUCCESS on success SLURM_ERROR else
  */
 extern int slurm_job_step_stat(uint32_t job_id, uint32_t step_id,
+			       uint32_t step_het_comp,
 			       char *node_list,
 			       uint16_t use_protocol_ver,
 			       job_step_stat_response_msg_t **resp)
@@ -579,11 +582,13 @@ extern int slurm_job_step_stat(uint32_t job_id, uint32_t step_id,
 
 	if (!node_list) {
 		if (!(step_layout =
-		      slurm_job_step_layout_get(job_id, step_id))) {
+		      slurm_job_step_layout_get(job_id, step_id,
+						step_het_comp))) {
 			rc = errno;
 			error("slurm_job_step_stat: "
-			      "problem getting step_layout for %u.%u: %s",
-			      job_id, step_id, slurm_strerror(rc));
+			      "problem getting step_layout for %u.%u+%u: %s",
+			      job_id, step_id, step_het_comp,
+			      slurm_strerror(rc));
 			return rc;
 		}
 		node_list = step_layout->node_list;
@@ -598,14 +603,15 @@ extern int slurm_job_step_stat(uint32_t job_id, uint32_t step_id,
 	} else
 		resp_out = *resp;
 
-	debug("%s: getting pid information of job %u.%u on nodes %s",
-	      __func__, job_id, step_id, node_list);
+	debug("%s: getting pid information of job %u.%u+%u on nodes %s",
+	      __func__, job_id, step_id, step_het_comp, node_list);
 
 	slurm_msg_t_init(&req_msg);
 
 	memset(&req, 0, sizeof(req));
 	resp_out->job_id = req.job_id = job_id;
 	resp_out->step_id = req.step_id = step_id;
+	resp_out->step_het_comp = req.step_het_comp = step_het_comp;
 
 	req_msg.protocol_version = use_protocol_ver;
 	req_msg.msg_type = REQUEST_JOB_STEP_STAT;
@@ -679,6 +685,7 @@ cleanup:
  * RET SLURM_SUCCESS on success SLURM_ERROR else
  */
 extern int slurm_job_step_get_pids(uint32_t job_id, uint32_t step_id,
+				   uint32_t step_het_comp,
 				   char *node_list,
 				   job_step_pids_response_msg_t **resp)
 {
@@ -696,7 +703,8 @@ extern int slurm_job_step_get_pids(uint32_t job_id, uint32_t step_id,
 
 	if (!node_list) {
 		if (!(step_layout =
-		     slurm_job_step_layout_get(job_id, step_id))) {
+		      slurm_job_step_layout_get(job_id, step_id,
+						step_het_comp))) {
 			rc = errno;
 			error("slurm_job_step_get_pids: "
 			      "problem getting step_layout for %u.%u: %s",
@@ -713,14 +721,15 @@ extern int slurm_job_step_get_pids(uint32_t job_id, uint32_t step_id,
 	} else
 		resp_out = *resp;
 
-	debug("%s: getting pid information of job %u.%u on nodes %s",
-	      __func__, job_id, step_id, node_list);
+	debug("%s: getting pid information of job %u.%u+%u on nodes %s",
+	      __func__, job_id, step_id, step_het_comp, node_list);
 
 	slurm_msg_t_init(&req_msg);
 
 	memset(&req, 0, sizeof(req));
 	resp_out->job_id = req.job_id = job_id;
 	resp_out->step_id = req.step_id = step_id;
+	resp_out->step_het_comp = req.step_het_comp = step_het_comp;
 
 	req_msg.msg_type = REQUEST_JOB_STEP_PIDS;
 	req_msg.data = &req;
