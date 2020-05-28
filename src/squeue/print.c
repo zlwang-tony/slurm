@@ -2364,41 +2364,29 @@ int _print_step_cluster_name(job_step_info_t *step, int width, bool right,
 
 int _print_step_id(job_step_info_t * step, int width, bool right, char* suffix)
 {
-	char id[FORMAT_STRING_SIZE];
-
 	if (step == NULL) {	/* Print the Header instead */
 		_print_str("STEPID", width, right, true);
-	} else if (step->array_job_id) {
-		if (step->step_id == SLURM_PENDING_STEP) {	/* Pending */
-			snprintf(id, FORMAT_STRING_SIZE, "%u_%u.TBD",
-				 step->array_job_id, step->array_task_id);
-		} else if (step->step_id == SLURM_EXTERN_CONT) {
-			snprintf(id, FORMAT_STRING_SIZE, "%u_%u.Extern",
-				 step->array_job_id, step->array_task_id);
-		} else if (step->step_id == SLURM_BATCH_SCRIPT) {
-			snprintf(id, FORMAT_STRING_SIZE, "%u_%u.Batch",
-				 step->array_job_id, step->array_task_id);
-		} else {
-			snprintf(id, FORMAT_STRING_SIZE, "%u_%u.%u",
-				 step->array_job_id, step->array_task_id,
-				 step->step_id);
-		}
-		_print_str(id, width, right, true);
 	} else {
-		if (step->step_id == SLURM_PENDING_STEP) {	/* Pending */
-			snprintf(id, FORMAT_STRING_SIZE, "%u.TBD",
-				 step->job_id);
-		} else if (step->step_id == SLURM_EXTERN_CONT) {
-			snprintf(id, FORMAT_STRING_SIZE, "%u.Extern",
-				 step->job_id);
-		} else if (step->step_id == SLURM_BATCH_SCRIPT) {
-			snprintf(id, FORMAT_STRING_SIZE, "%u.Batch",
-				 step->job_id);
-		} else {
-			snprintf(id, FORMAT_STRING_SIZE, "%u.%u",
-				 step->job_id, step->step_id);
-		}
-		_print_str(id, width, right, true);
+		char *out = NULL;
+
+		if (step->array_job_id)
+			xstrfmtcat(out, "%u_%u.",
+				   step->array_job_id,
+				   step->array_task_id);
+		else
+			xstrfmtcat(out, "%u.", step->job_id);
+
+		if (step->step_id == SLURM_PENDING_STEP)
+			xstrcat(out, "TBD");
+		else if (step->step_id == SLURM_BATCH_SCRIPT)
+			xstrcat(out, "batch");
+		else if (step->step_id == SLURM_EXTERN_CONT)
+			xstrcat(out, "extern");
+		else
+			xstrfmtcat(out, "%u", step->step_id);
+
+		_print_str(out, width, right, true);
+		xfree(out);
 	}
 	if (suffix)
 		printf("%s", suffix);
