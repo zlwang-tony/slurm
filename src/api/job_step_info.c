@@ -188,8 +188,12 @@ slurm_sprint_job_step_info ( job_step_info_t * job_step_ptr,
 		xstrcat(out, "batch ");
 	else if (job_step_ptr->step_id == SLURM_EXTERN_CONT)
 		xstrcat(out, "extern ");
-	else
+	else if (job_step_ptr->step_het_comp == NO_VAL)
 		xstrfmtcat(out, "%u ", job_step_ptr->step_id);
+	else
+		xstrfmtcat(out, "%u+%u ",
+			   job_step_ptr->step_id,
+			   job_step_ptr->step_het_comp);
 
 	xstrfmtcat(out, "UserId=%u StartTime=%s TimeLimit=%s",
 		   job_step_ptr->user_id, time_str, limit_str);
