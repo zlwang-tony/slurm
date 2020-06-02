@@ -146,8 +146,11 @@ static void _job_complete_handler(srun_job_complete_msg_t *msg)
 
 	if (msg->step_id == NO_VAL)
 		info("Force Terminated job %u", msg->job_id);
-	else
+	else if (msg->step_het_comp == NO_VAL)
 		info("Force Terminated job %u.%u", msg->job_id, msg->step_id);
+	else
+		info("Force Terminated job %u.%u+%u",
+		     msg->job_id, msg->step_id, msg->step_het_comp);
 }
 
 /*

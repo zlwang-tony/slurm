@@ -10052,6 +10052,54 @@ unpack_error:
 	return SLURM_ERROR;
 }
 
+static void _pack_srun_job_complete_msg(srun_job_complete_msg_t *msg,
+					Buf buffer, uint16_t protocol_version)
+{
+	xassert(msg);
+
+	if (protocol_version >= SLURM_20_11_PROTOCOL_VERSION) {
+		pack32(msg->job_id, buffer);
+		pack32(msg->step_id, buffer);
+		pack32(msg->step_het_comp, buffer);
+	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
+		pack32(msg->job_id, buffer);
+		pack32(msg->step_id, buffer);
+	} else
+		error("%s: protocol_version %hu not supported",
+		      __func__, protocol_version);
+}
+
+static int _unpack_srun_job_complete_msg(srun_job_complete_msg_t **msg_ptr,
+					 Buf buffer, uint16_t protocol_version)
+{
+	srun_job_complete_msg_t *msg;
+	xassert(msg_ptr);
+
+	msg = xmalloc(sizeof(*msg));
+	*msg_ptr = msg;
+
+	if (protocol_version >= SLURM_20_11_PROTOCOL_VERSION) {
+		safe_unpack32(&msg->job_id, buffer);
+		safe_unpack32(&msg->step_id, buffer);
+		safe_unpack32(&msg->step_het_comp, buffer);
+	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
+		safe_unpack32(&msg->job_id, buffer);
+		safe_unpack32(&msg->step_id, buffer);
+		msg->step_het_comp = NO_VAL;
+	} else {
+		error("%s: protocol_version %hu not supported",
+		      __func__, protocol_version);
+		goto unpack_error;
+	}
+
+	return SLURM_SUCCESS;
+
+unpack_error:
+	slurm_free_srun_job_complete_msg(msg);
+	*msg_ptr = NULL;
+	return SLURM_ERROR;
+}
+
 static void
 _pack_srun_ping_msg(srun_ping_msg_t * msg, Buf buffer,
 		    uint16_t protocol_version)
@@ -12481,6 +12529,10 @@ pack_msg(slurm_msg_t const *msg, Buf buffer)
 				    msg->protocol_version);
 		break;
 	case SRUN_JOB_COMPLETE:
+		_pack_srun_job_complete_msg(
+			(srun_job_complete_msg_t *)msg->data,
+			buffer, msg->protocol_version);
+		break;
 	case SRUN_PING:
 		_pack_srun_ping_msg((srun_ping_msg_t *)msg->data, buffer,
 				    msg->protocol_version);
@@ -13175,6 +13227,11 @@ unpack_msg(slurm_msg_t * msg, Buf buffer)
 					   msg->protocol_version);
 		break;
 	case SRUN_JOB_COMPLETE:
+		rc = _unpack_srun_job_complete_msg(
+			(srun_job_complete_msg_t **) & msg->data,
+			buffer,
+			msg->protocol_version);
+		break;
 	case SRUN_PING:
 		rc = _unpack_srun_ping_msg((srun_ping_msg_t **) & msg->data,
 					   buffer,

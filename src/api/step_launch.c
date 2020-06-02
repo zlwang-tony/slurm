@@ -1269,9 +1269,13 @@ _job_complete_handler(struct step_launch_state *sls, slurm_msg_t *complete_msg)
 	if (step_msg->step_id == NO_VAL) {
 		verbose("Complete job %u received",
 			step_msg->job_id);
-	} else {
+	} else if (step_msg->step_het_comp == NO_VAL) {
 		verbose("Complete job step %u.%u received",
 			step_msg->job_id, step_msg->step_id);
+	} else {
+		verbose("Complete job step %u.%u+%u received",
+			step_msg->job_id, step_msg->step_id,
+			step_msg->step_het_comp);
 	}
 
 	if (sls->callback.step_complete)

@@ -1852,6 +1852,7 @@ typedef struct srun_ping_msg {
 
 typedef struct srun_job_complete_msg {
 	uint32_t job_id;        /* slurm job_id */
+	uint32_t step_het_comp; /* het comp or NO_VAL */
 	uint32_t step_id;       /* step_id or NO_VAL */
 } srun_job_complete_msg_t;
 

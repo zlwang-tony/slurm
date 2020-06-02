@@ -504,6 +504,7 @@ extern void srun_step_complete(step_record_t *step_ptr)
 		msg_arg = xmalloc(sizeof(srun_job_complete_msg_t));
 		msg_arg->job_id   = step_ptr->job_ptr->job_id;
 		msg_arg->step_id  = step_ptr->step_id;
+		msg_arg->step_het_comp  = step_ptr->step_het_comp;
 		_srun_agent_launch(addr, step_ptr->host, SRUN_JOB_COMPLETE,
 				   msg_arg, step_ptr->start_protocol_ver);
 	}
