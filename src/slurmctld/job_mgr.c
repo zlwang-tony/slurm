@@ -5664,7 +5664,14 @@ static void _signal_batch_job(job_record_t *job_ptr, uint16_t signal,
 	agent_args->hostlist	= hostlist_create(job_ptr->batch_host);
 	signal_tasks_msg = xmalloc(sizeof(signal_tasks_msg_t));
 	signal_tasks_msg->job_id      = job_ptr->job_id;
-	signal_tasks_msg->job_step_id = NO_VAL;
+	/*
+	 * SLURM_BATCH_SCRIPT changed in 20.11, after 2 versions this can be
+	 * simplified.
+	 */
+	if (agent_args->protocol_version >= SLURM_20_11_PROTOCOL_VERSION)
+		signal_tasks_msg->job_step_id = SLURM_BATCH_SCRIPT;
+	else
+		signal_tasks_msg->job_step_id = NO_VAL;
 	signal_tasks_msg->step_het_comp = NO_VAL;
 
 	signal_tasks_msg->flags = flags;
