@@ -565,18 +565,22 @@ extern int slurm_job_step_stat(uint32_t job_id, uint32_t step_id,
 	slurm_step_layout_t *step_layout = NULL;
 	job_step_stat_response_msg_t *resp_out;
 	bool created = 0;
+	char *job_id_str;
 
 	xassert(resp);
+
+	job_id_str = xstrdup_printf("%u.%u", job_id, step_id);
+	if (step_het_comp == NO_VAL)
+		xstrfmtcat(job_id_str, "+%u", step_het_comp);
 
 	if (!node_list) {
 		if (!(step_layout =
 		      slurm_job_step_layout_get(job_id, step_id,
 						step_het_comp))) {
 			rc = errno;
-			error("slurm_job_step_stat: "
-			      "problem getting step_layout for %u.%u+%u: %s",
-			      job_id, step_id, step_het_comp,
-			      slurm_strerror(rc));
+			error("%s: problem getting step_layout for %s: %s",
+			      __func__, job_id_str, slurm_strerror(rc));
+
 			return rc;
 		}
 		node_list = step_layout->node_list;
@@ -591,8 +595,8 @@ extern int slurm_job_step_stat(uint32_t job_id, uint32_t step_id,
 	} else
 		resp_out = *resp;
 
-	debug("%s: getting pid information of job %u.%u+%u on nodes %s",
-	      __func__, job_id, step_id, step_het_comp, node_list);
+	debug("%s: getting pid information of job %s on nodes %s",
+	      __func__, job_id_str, node_list);
 
 	slurm_msg_t_init(&req_msg);
 
@@ -630,14 +634,13 @@ extern int slurm_job_step_stat(uint32_t job_id, uint32_t step_id,
 			rc = slurm_get_return_code(ret_data_info->type,
 						   ret_data_info->data);
 			if (rc == ESLURM_INVALID_JOB_ID) {
-				debug("slurm_job_step_stat: job step %u.%u "
-				      "has already completed",
-				      job_id, step_id);
+				debug("%s: job step %s has already completed",
+				      __func__, job_id_str);
 			} else {
-				error("slurm_job_step_stat: "
-				      "there was an error with the request to "
-				      "%s rc = %s",
+				error("%s: there was an error with the request to %s for step %s rc = %s",
+				      __func__,
 				      ret_data_info->node_name,
+				      job_id_str,
 				      slurm_strerror(rc));
 			}
 			break;
@@ -657,6 +660,7 @@ extern int slurm_job_step_stat(uint32_t job_id, uint32_t step_id,
 	if (resp_out->stats_list)
 		list_sort(resp_out->stats_list, (ListCmpF)_sort_stats_by_name);
 cleanup:
+	xfree(job_id_str);
 	slurm_step_layout_destroy(step_layout);
 
 	return rc;
