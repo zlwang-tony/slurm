@@ -10107,7 +10107,7 @@ _pack_srun_ping_msg(srun_ping_msg_t * msg, Buf buffer,
 	xassert(msg);
 
 	if (protocol_version >= SLURM_20_11_PROTOCOL_VERSION) {
-		pack32(msg->job_id, buffer);
+		/* empty, nothing needs to be sent */
 	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		pack32(msg->job_id, buffer);
 		pack32(NO_VAL, buffer);
@@ -10123,13 +10123,13 @@ _unpack_srun_ping_msg(srun_ping_msg_t ** msg_ptr, Buf buffer,
 	srun_ping_msg_t * msg;
 	xassert(msg_ptr);
 
-	msg = xmalloc ( sizeof (srun_ping_msg_t) ) ;
-	*msg_ptr = msg;
-
 	if (protocol_version >= SLURM_20_11_PROTOCOL_VERSION) {
-		safe_unpack32(&msg->job_id, buffer);
+		*msg_ptr = NULL;
+		/* empty, nothing is sent */
 	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		uint32_t throw_away;
+		msg = xmalloc(sizeof(srun_ping_msg_t));
+		*msg_ptr = msg;
 		safe_unpack32(&msg->job_id, buffer);
 		safe_unpack32(&throw_away, buffer);
 	} else {

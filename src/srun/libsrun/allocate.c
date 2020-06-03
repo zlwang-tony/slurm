@@ -177,12 +177,6 @@ static void _user_msg_handler(srun_user_msg_t *msg)
 	info("%s", msg->msg);
 }
 
-static void _ping_handler(srun_ping_msg_t *msg)
-{
-	/* the api will respond so there really isn't anything to do
-	   here */
-}
-
 static void _node_fail_handler(srun_node_fail_msg_t *msg)
 {
 	error("Node failure on %s", msg->nodelist);
@@ -389,7 +383,6 @@ extern resource_allocation_response_msg_t *
 
 	j->origin_cluster = xstrdup(slurm_conf.cluster_name);
 
-	callbacks.ping = _ping_handler;
 	callbacks.timeout = _timeout_handler;
 	callbacks.job_complete = _job_complete_handler;
 	callbacks.job_suspend = NULL;
@@ -536,7 +529,6 @@ List allocate_het_job_nodes(bool handle_signals)
 		return NULL;
 	}
 
-	callbacks.ping = _ping_handler;
 	callbacks.timeout = _timeout_handler;
 	callbacks.job_complete = _job_complete_handler;
 	callbacks.job_suspend = NULL;
