@@ -10154,6 +10154,7 @@ _pack_srun_node_fail_msg(srun_node_fail_msg_t * msg, Buf buffer,
 
 	if (protocol_version >= SLURM_20_11_PROTOCOL_VERSION) {
 		pack32(msg->job_id, buffer);
+		pack32(msg->step_het_comp, buffer);
 		pack32(msg->step_id, buffer);
 		packstr(msg->nodelist, buffer);
 	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
@@ -10179,10 +10180,12 @@ _unpack_srun_node_fail_msg(srun_node_fail_msg_t ** msg_ptr, Buf buffer,
 
 	if (protocol_version >= SLURM_20_11_PROTOCOL_VERSION) {
 		safe_unpack32(&msg->job_id, buffer);
+		safe_unpack32(&msg->step_het_comp, buffer);
 		safe_unpack32(&msg->step_id, buffer);
 		safe_unpackstr_xmalloc(&msg->nodelist, &uint32_tmp, buffer);
 	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		safe_unpack32(&msg->job_id, buffer);
+		msg->step_het_comp = NO_VAL;
 		safe_unpack32(&msg->step_id, buffer);
 		convert_old_step_id(&msg->step_id);
 		safe_unpackstr_xmalloc(&msg->nodelist, &uint32_tmp, buffer);

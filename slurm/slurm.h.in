@@ -1871,6 +1871,7 @@ typedef struct srun_user_msg {
 typedef struct srun_node_fail_msg {
 	uint32_t job_id;	/* slurm job_id */
 	char *nodelist;		/* name of failed node(s) */
+	uint32_t step_het_comp; /* het comp or NO_VAL */
 	uint32_t step_id;	/* step_id or NO_VAL */
 } srun_node_fail_msg_t;
 
