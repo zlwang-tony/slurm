@@ -1394,9 +1394,16 @@ _step_missing_handler(struct step_launch_state *sls, slurm_msg_t *missing_msg)
 	int   num_tasks;
 	bool  active;
 
-	debug("Step %u.%u missing from node(s) %s",
-	      step_missing->job_id, step_missing->step_id,
-	      step_missing->nodelist);
+	if (step_missing->step_het_comp == NO_VAL)
+		debug("Step %u.%u missing from node(s) %s",
+		      step_missing->job_id, step_missing->step_id,
+		      step_missing->nodelist);
+	else
+		debug("Step %u.%u+%u missing from node(s) %s",
+		      step_missing->job_id, step_missing->step_id,
+		      step_missing->step_het_comp,
+		      step_missing->nodelist);
+
 
 	/* Ignore this message in the unusual "user_managed_io" case.  No way
 	   to confirm a bad connection, since a test message goes straight to

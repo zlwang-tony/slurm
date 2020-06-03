@@ -533,6 +533,7 @@ extern void srun_step_missing(step_record_t *step_ptr, char *node_list)
 		msg_arg = xmalloc(sizeof(srun_step_missing_msg_t));
 		msg_arg->job_id   = step_ptr->job_ptr->job_id;
 		msg_arg->step_id  = step_ptr->step_id;
+		msg_arg->step_het_comp = step_ptr->step_het_comp;
 		msg_arg->nodelist = xstrdup(node_list);
 		_srun_agent_launch(addr, step_ptr->host, SRUN_STEP_MISSING,
 				   msg_arg, step_ptr->start_protocol_ver);
