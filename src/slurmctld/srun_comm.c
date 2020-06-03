@@ -192,6 +192,7 @@ extern void srun_allocate_abort(job_record_t *job_ptr)
 		msg_arg = xmalloc(sizeof(srun_timeout_msg_t));
 		msg_arg->job_id   = job_ptr->job_id;
 		msg_arg->step_id  = NO_VAL;
+		msg_arg->step_het_comp = NO_VAL;
 		_srun_agent_launch(addr, job_ptr->alloc_node,
 				   SRUN_JOB_COMPLETE,
 				   msg_arg,
@@ -324,6 +325,7 @@ extern void srun_step_timeout(step_record_t *step_ptr, time_t timeout_val)
 	msg_arg = xmalloc(sizeof(srun_timeout_msg_t));
 	msg_arg->job_id   = step_ptr->job_ptr->job_id;
 	msg_arg->step_id  = step_ptr->step_id;
+	msg_arg->step_het_comp = step_ptr->step_het_comp;
 	msg_arg->timeout  = timeout_val;
 	_srun_agent_launch(addr, step_ptr->host, SRUN_TIMEOUT, msg_arg,
 			   step_ptr->start_protocol_ver);
@@ -350,6 +352,7 @@ extern void srun_timeout(job_record_t *job_ptr)
 		msg_arg = xmalloc(sizeof(srun_timeout_msg_t));
 		msg_arg->job_id   = job_ptr->job_id;
 		msg_arg->step_id  = NO_VAL;
+		msg_arg->step_het_comp = NO_VAL;
 		msg_arg->timeout  = job_ptr->end_time;
 		_srun_agent_launch(addr, job_ptr->alloc_node, SRUN_TIMEOUT,
 				   msg_arg, job_ptr->start_protocol_ver);

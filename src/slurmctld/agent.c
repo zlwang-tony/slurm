@@ -662,6 +662,7 @@ static void _notify_slurmctld_jobs(agent_info_t *agent_ptr)
 		srun_timeout_msg_t *msg = *agent_ptr->msg_args_pptr;
 		job_id  = msg->job_id;
 		step_id = msg->step_id;
+		step_het_comp = msg->step_het_comp;
 	} else if (agent_ptr->msg_type == RESPONSE_RESOURCE_ALLOCATION) {
 		resource_allocation_response_msg_t *msg =
 			*agent_ptr->msg_args_pptr;

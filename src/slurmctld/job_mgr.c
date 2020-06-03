@@ -16793,6 +16793,7 @@ extern int job_end_time(job_alloc_info_msg_t *time_req_msg,
 	memset(timeout_msg, 0, sizeof(srun_timeout_msg_t));
 	timeout_msg->job_id  = time_req_msg->job_id;
 	timeout_msg->step_id = NO_VAL;
+	timeout_msg->step_het_comp = NO_VAL;
 	timeout_msg->timeout = job_ptr->end_time;
 	return SLURM_SUCCESS;
 }
