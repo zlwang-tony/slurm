@@ -2399,8 +2399,9 @@ static void _slurm_rpc_job_step_kill(uint32_t uid, slurm_msg_t * msg)
 	job_step_kill_msg_t *job_step_kill_msg =
 		(job_step_kill_msg_t *) msg->data;
 
-	log_flag(STEPS, "Processing RPC: REQUEST_CANCEL_JOB_STEP JobId=%u StepId=%u uid=%u",
+	log_flag(STEPS, "Processing RPC: REQUEST_CANCEL_JOB_STEP JobId=%u StepId=%u HetComp=%u uid=%u",
 		 job_step_kill_msg->job_id, job_step_kill_msg->job_step_id,
+		 job_step_kill_msg->step_het_comp,
 		 uid);
 	_throttle_start(&active_rpc_cnt);
 

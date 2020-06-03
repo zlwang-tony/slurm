@@ -621,6 +621,7 @@ step_record_t *find_step_record(job_record_t *job_ptr, uint32_t step_id,
  * job_step_signal - signal the specified job step
  * IN job_id - id of the job to be cancelled
  * IN step_id - id of the job step to be cancelled
+ * IN step_het_comp - component id of a het_step or NO_VAL for a normal step.
  * IN signal - user id of user issuing the RPC
  * IN flags - RPC flags
  * IN uid - user id of user issuing the RPC
@@ -628,7 +629,7 @@ step_record_t *find_step_record(job_record_t *job_ptr, uint32_t step_id,
  * global: job_list - pointer global job list
  *	last_job_update - time of last job table update
  */
-int job_step_signal(uint32_t job_id, uint32_t step_id,
+int job_step_signal(uint32_t job_id, uint32_t step_id, uint32_t step_het_comp,
 		    uint16_t signal, uint16_t flags, uid_t uid)
 {
 	job_record_t *job_ptr;
@@ -637,7 +638,8 @@ int job_step_signal(uint32_t job_id, uint32_t step_id,
 				      .rc_in = SLURM_SUCCESS,
 				      .signal = signal,
 				      .step_info = { .step_id = step_id,
-						     .step_het_comp = NO_VAL },
+						     .step_het_comp =
+						     step_het_comp },
 				      .uid = uid };
 
 	job_ptr = find_job_record(job_id);
@@ -667,8 +669,8 @@ int job_step_signal(uint32_t job_id, uint32_t step_id,
 	list_for_each(job_ptr->step_list, _step_signal, &step_signal);
 
 	if (!step_signal.found && !(step_signal.flags & KILL_FULL_JOB)) {
-		info("%s: %pJ StepId=%u not found",
-		     __func__, job_ptr, step_id);
+		info("%s: %pJ StepId=%u HetComp=%u not found",
+		     __func__, job_ptr, step_id, step_het_comp);
 		return ESLURM_INVALID_JOB_ID;
 	}
 

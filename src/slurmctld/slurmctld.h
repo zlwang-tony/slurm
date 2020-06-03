@@ -1686,6 +1686,7 @@ extern int job_set_top(top_job_msg_t *top_ptr, uid_t uid, int conn_fd,
  * job_step_signal - signal the specified job step
  * IN job_id - id of the job to be cancelled
  * IN step_id - id of the job step to be cancelled
+ * IN step_het_comp - component id of a het_step or NO_VAL for a normal step.
  * IN signal - user id of user issuing the RPC
  * IN flags - RPC flags
  * IN uid - user id of user issuing the RPC
@@ -1693,7 +1694,7 @@ extern int job_set_top(top_job_msg_t *top_ptr, uid_t uid, int conn_fd,
  * global: job_list - pointer global job list
  *	last_job_update - time of last job table update
  */
-int job_step_signal(uint32_t job_id, uint32_t step_id,
+int job_step_signal(uint32_t job_id, uint32_t step_id, uint32_t step_het_comp,
 		    uint16_t signal, uint16_t flags, uid_t uid);
 
 /*

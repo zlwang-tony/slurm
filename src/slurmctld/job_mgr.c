@@ -3268,6 +3268,7 @@ static int _kill_job_step(job_step_kill_msg_t *job_step_kill_msg, uint32_t uid)
 	} else {
 		error_code = job_step_signal(job_step_kill_msg->job_id,
 					     job_step_kill_msg->job_step_id,
+					     job_step_kill_msg->step_het_comp,
 					     job_step_kill_msg->signal,
 					     job_step_kill_msg->flags,
 					     uid);
@@ -3276,22 +3277,28 @@ static int _kill_job_step(job_step_kill_msg_t *job_step_kill_msg, uint32_t uid)
 
 		/* return result */
 		if (error_code) {
-			log_flag(STEPS, "Signal %u of JobId=%u StepId=%u by UID=%u: %s",
+			log_flag(STEPS, "Signal %u of JobId=%u StepId=%u HetComp=%u by UID=%u: %s",
 				 job_step_kill_msg->signal,
 				 job_step_kill_msg->job_id,
-				 job_step_kill_msg->job_step_id, uid,
+				 job_step_kill_msg->job_step_id,
+				 job_step_kill_msg->step_het_comp,
+				 uid,
 				 slurm_strerror(error_code));
 		} else {
 			if (job_step_kill_msg->signal == SIGKILL)
-				log_flag(STEPS, "%s: Cancel of JobId=%u StepId=%u by UID=%u %s",
+				log_flag(STEPS, "%s: Cancel of JobId=%u StepId=%u HetComp=%u by UID=%u %s",
 					 __func__, job_step_kill_msg->job_id,
-					 job_step_kill_msg->job_step_id, uid,
+					 job_step_kill_msg->job_step_id,
+					 job_step_kill_msg->step_het_comp,
+					 uid,
 					 TIME_STR);
 			else
-				log_flag(STEPS, "%s: Signal %u of JobId=%u StepId=%u by UID=%u %s",
+				log_flag(STEPS, "%s: Signal %u of JobId=%u StepId=%u HetComp=%u by UID=%u %s",
 					 __func__, job_step_kill_msg->signal,
 					 job_step_kill_msg->job_id,
-					 job_step_kill_msg->job_step_id, uid,
+					 job_step_kill_msg->job_step_id,
+					 job_step_kill_msg->step_het_comp,
+					 uid,
 					 TIME_STR);
 
 			/* Below function provides its own locking */
@@ -15384,7 +15391,7 @@ static void _signal_job(job_record_t *job_ptr, int signal, uint16_t flags)
 #endif
 
 	if (notify_srun) {
-		(void)job_step_signal(job_ptr->job_id, 0,
+		(void)job_step_signal(job_ptr->job_id, 0, NO_VAL,
 				      signal, KILL_FULL_JOB, 0);
 		return;
 	}

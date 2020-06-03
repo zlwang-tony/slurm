@@ -1519,8 +1519,16 @@ static void
 _step_step_signal(struct step_launch_state *sls, slurm_msg_t *signal_msg)
 {
 	job_step_kill_msg_t *step_signal = signal_msg->data;
-	debug2("Signal %u requested for step %u.%u", step_signal->signal,
-	       step_signal->job_id, step_signal->job_step_id);
+	if (step_signal->step_het_comp == NO_VAL)
+		debug2("Signal %u requested for step %u.%u",
+		       step_signal->signal,
+		       step_signal->job_id, step_signal->job_step_id);
+	else
+		debug2("Signal %u requested for step %u.%u+%u",
+		       step_signal->signal,
+		       step_signal->job_id, step_signal->job_step_id,
+		       step_signal->step_het_comp);
+
 	if (sls->callback.step_signal)
 		(sls->callback.step_signal)(step_signal->signal);
 

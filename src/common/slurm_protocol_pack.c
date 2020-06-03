@@ -8441,6 +8441,7 @@ _pack_job_step_kill_msg(job_step_kill_msg_t * msg, Buf buffer,
 		pack32((uint32_t)msg->job_step_id, buffer);
 		packstr(msg->sibling, buffer);
 		pack16((uint16_t)msg->signal, buffer);
+		pack32(msg->step_het_comp, buffer);
 		pack16((uint16_t)msg->flags, buffer);
 	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		packstr(msg->sjob_id, buffer);
@@ -8477,6 +8478,7 @@ _unpack_job_step_kill_msg(job_step_kill_msg_t ** msg_ptr, Buf buffer,
 		safe_unpack32(&msg->job_step_id, buffer);
 		safe_unpackstr_xmalloc(&msg->sibling, &cc, buffer);
 		safe_unpack16(&msg->signal, buffer);
+		safe_unpack32(&msg->step_het_comp, buffer);
 		safe_unpack16(&msg->flags, buffer);
 	} else if (protocol_version >= SLURM_MIN_PROTOCOL_VERSION) {
 		safe_unpackstr_xmalloc(&(msg)->sjob_id, &cc, buffer);
@@ -8485,6 +8487,7 @@ _unpack_job_step_kill_msg(job_step_kill_msg_t ** msg_ptr, Buf buffer,
 		convert_old_step_id(&msg->job_step_id);
 		safe_unpackstr_xmalloc(&msg->sibling, &cc, buffer);
 		safe_unpack16(&msg->signal, buffer);
+		msg->step_het_comp = NO_VAL;
 		safe_unpack16(&msg->flags, buffer);
 	} else {
 		error("%s: protocol_version %hu not supported",

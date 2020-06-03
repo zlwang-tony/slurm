@@ -2980,6 +2980,7 @@ _cancel_step_mem_limit(uint32_t job_id, uint32_t step_id)
 	memset(&kill_req, 0, sizeof(kill_req));
 	kill_req.job_id      = job_id;
 	kill_req.job_step_id = step_id;
+	kill_req.step_het_comp = NO_VAL;
 	kill_req.signal      = SIGKILL;
 	kill_req.flags       = KILL_OOM;
 	msg.msg_type    = REQUEST_CANCEL_JOB_STEP;

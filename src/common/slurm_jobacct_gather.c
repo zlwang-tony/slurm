@@ -297,6 +297,7 @@ static void _acct_kill_step(void)
 	memset(&req, 0, sizeof(job_step_kill_msg_t));
 	req.job_id      = jobacct_job_id;
 	req.job_step_id = jobacct_step_id;
+	req.step_het_comp = NO_VAL; /* kill the whole step */
 	req.signal      = SIGKILL;
 	req.flags       = 0;
 	msg.msg_type    = REQUEST_CANCEL_JOB_STEP;
