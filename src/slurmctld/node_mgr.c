@@ -2772,6 +2772,8 @@ static char *_build_step_id(char *buf, int buf_len, uint32_t step_id)
 {
 	if (step_id == SLURM_BATCH_SCRIPT)
 		snprintf(buf, buf_len, "StepId=Batch");
+	else if (step_id == SLURM_EXTERN_STEP)
+		snprintf(buf, buf_len, "StepId=Extern");
 	else
 		snprintf(buf, buf_len, "StepId=%u", step_id);
 	return buf;
