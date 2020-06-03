@@ -652,7 +652,7 @@ static void _notify_slurmctld_jobs(agent_info_t *agent_ptr)
 	/* Locks: Write job */
 	slurmctld_lock_t job_write_lock =
 	    { NO_LOCK, WRITE_LOCK, NO_LOCK, NO_LOCK, NO_LOCK };
-	uint32_t job_id = 0, step_id = 0, step_het_comp = NO_VAL;
+	uint32_t job_id = 0, step_id = NO_VAL, step_het_comp = NO_VAL;
 	thd_t *thread_ptr = agent_ptr->thread_struct;
 
 	if        (agent_ptr->msg_type == SRUN_PING) {
@@ -666,7 +666,6 @@ static void _notify_slurmctld_jobs(agent_info_t *agent_ptr)
 		resource_allocation_response_msg_t *msg =
 			*agent_ptr->msg_args_pptr;
 		job_id  = msg->job_id;
-		step_id = NO_VAL;
 	} else if (agent_ptr->msg_type == RESPONSE_HET_JOB_ALLOCATION) {
 		List het_alloc_list = *agent_ptr->msg_args_pptr;
 		resource_allocation_response_msg_t *msg;
@@ -674,7 +673,6 @@ static void _notify_slurmctld_jobs(agent_info_t *agent_ptr)
 			return;
 		msg = list_peek(het_alloc_list);
 		job_id  = msg->job_id;
-		step_id = NO_VAL;
 	} else if ((agent_ptr->msg_type == SRUN_JOB_COMPLETE)		||
 		   (agent_ptr->msg_type == SRUN_REQUEST_SUSPEND)	||
 		   (agent_ptr->msg_type == SRUN_STEP_MISSING)		||
