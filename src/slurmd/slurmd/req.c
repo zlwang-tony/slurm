@@ -2961,7 +2961,7 @@ _load_job_limits(void)
 }
 
 static void
-_cancel_step_mem_limit(uint32_t job_id, uint32_t step_id)
+_cancel_step_mem_limit(uint32_t job_id)
 {
 	slurm_msg_t msg;
 	job_notify_msg_t notify_req;
@@ -2971,7 +2971,7 @@ _cancel_step_mem_limit(uint32_t job_id, uint32_t step_id)
 	slurm_msg_t_init(&msg);
 	memset(&notify_req, 0, sizeof(notify_req));
 	notify_req.job_id      = job_id;
-	notify_req.job_step_id = step_id;
+	notify_req.job_step_id = NO_VAL;
 	notify_req.message     = "Exceeded job memory limit";
 	msg.msg_type    = REQUEST_JOB_NOTIFY;
 	msg.data        = &notify_req;
@@ -2979,7 +2979,7 @@ _cancel_step_mem_limit(uint32_t job_id, uint32_t step_id)
 
 	memset(&kill_req, 0, sizeof(kill_req));
 	kill_req.job_id      = job_id;
-	kill_req.job_step_id = step_id;
+	kill_req.job_step_id = NO_VAL;
 	kill_req.step_het_comp = NO_VAL;
 	kill_req.signal      = SIGKILL;
 	kill_req.flags       = KILL_OOM;
@@ -3133,8 +3133,7 @@ _enforce_job_mem_limit(void)
 			     job_mem_info_ptr[i].job_id,
 			     job_mem_info_ptr[i].mem_used,
 			     job_mem_info_ptr[i].mem_limit);
-			_cancel_step_mem_limit(job_mem_info_ptr[i].job_id,
-					       NO_VAL);
+			_cancel_step_mem_limit(job_mem_info_ptr[i].job_id);
 		} else if ((job_mem_info_ptr[i].vsize_limit != 0) &&
 			   (job_mem_info_ptr[i].vsize_used >
 			    job_mem_info_ptr[i].vsize_limit)) {
@@ -3143,8 +3142,7 @@ _enforce_job_mem_limit(void)
 			     job_mem_info_ptr[i].job_id,
 			     job_mem_info_ptr[i].vsize_used,
 			     job_mem_info_ptr[i].vsize_limit);
-			_cancel_step_mem_limit(job_mem_info_ptr[i].job_id,
-					       NO_VAL);
+			_cancel_step_mem_limit(job_mem_info_ptr[i].job_id);
 		}
 	}
 	xfree(job_mem_info_ptr);
