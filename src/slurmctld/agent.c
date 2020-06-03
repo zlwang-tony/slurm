@@ -652,7 +652,7 @@ static void _notify_slurmctld_jobs(agent_info_t *agent_ptr)
 	/* Locks: Write job */
 	slurmctld_lock_t job_write_lock =
 	    { NO_LOCK, WRITE_LOCK, NO_LOCK, NO_LOCK, NO_LOCK };
-	uint32_t job_id = 0, step_id = 0;
+	uint32_t job_id = 0, step_id = 0, step_het_comp = NO_VAL;
 	thd_t *thread_ptr = agent_ptr->thread_struct;
 
 	if        (agent_ptr->msg_type == SRUN_PING) {
@@ -690,7 +690,7 @@ static void _notify_slurmctld_jobs(agent_info_t *agent_ptr)
 	}
 	lock_slurmctld(job_write_lock);
 	if  (thread_ptr[0].state == DSH_DONE) {
-		srun_response(job_id, step_id);
+		srun_response(job_id, step_id, step_het_comp);
 	}
 
 	unlock_slurmctld(job_write_lock);
