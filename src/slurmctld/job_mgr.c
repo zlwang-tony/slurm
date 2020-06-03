@@ -14008,15 +14008,6 @@ extern void job_post_resize_acctg(job_record_t *job_ptr)
 		job_ptr->bit_flags |= JOB_RESIZED;
 }
 
-static char *_build_step_id(char *buf, int buf_len, uint32_t step_id)
-{
-	if (step_id == SLURM_BATCH_SCRIPT)
-		snprintf(buf, buf_len, "StepId=Batch");
-	else
-		snprintf(buf, buf_len, "StepId=%u", step_id);
-	return buf;
-}
-
 /*
  * validate_jobs_on_node - validate that any jobs that should be on the node
  *	are actually running, if not clean up the job records and/or node
@@ -14069,8 +14060,11 @@ validate_jobs_on_node(slurm_node_registration_status_msg_t *reg_msg)
 		     (reg_msg->job_id[i] <= MAX_NOALLOC_JOBID) ) {
 			info("NoAllocate JobId=%u %s reported on node %s",
 			     reg_msg->job_id[i],
-			     _build_step_id(step_str, sizeof(step_str),
-					    reg_msg->step_id[i]),
+			     build_step_id(step_str, sizeof(step_str),
+					   reg_msg->step_id[i],
+					   reg_msg->step_het_comp ?
+					   reg_msg->step_het_comp[i] :
+					   NO_VAL),
 			     reg_msg->node_name);
 			continue;
 		}
@@ -14079,8 +14073,11 @@ validate_jobs_on_node(slurm_node_registration_status_msg_t *reg_msg)
 		if (job_ptr == NULL) {
 			error("Orphan JobId=%u %s reported on node %s",
 			      reg_msg->job_id[i],
-			      _build_step_id(step_str, sizeof(step_str),
-					     reg_msg->step_id[i]),
+			      build_step_id(step_str, sizeof(step_str),
+					    reg_msg->step_id[i],
+					    reg_msg->step_het_comp ?
+					    reg_msg->step_het_comp[i] :
+					    NO_VAL),
 			      reg_msg->node_name);
 			abort_job_on_node(reg_msg->job_id[i],
 					  job_ptr, node_ptr->name);
@@ -14111,9 +14108,12 @@ validate_jobs_on_node(slurm_node_registration_status_msg_t *reg_msg)
 				 * original allocation just responded here. */
 				error("Registered %pJ %s on wrong node %s",
 				      job_ptr,
-				       _build_step_id(step_str,
-						      sizeof(step_str),
-						      reg_msg->step_id[i]),
+				      build_step_id(step_str,
+						    sizeof(step_str),
+						    reg_msg->step_id[i],
+						    reg_msg->step_het_comp ?
+						    reg_msg->step_het_comp[i] :
+						    NO_VAL),
 				      reg_msg->node_name);
 				info("%s: job nodes %s count %d inx %d",
 				     __func__, job_ptr->nodes,
@@ -14137,8 +14137,11 @@ validate_jobs_on_node(slurm_node_registration_status_msg_t *reg_msg)
 			 * slurmd that went DOWN is now responding */
 			error("Registered PENDING %pJ %s on node %s",
 			      job_ptr,
-			      _build_step_id(step_str, sizeof(step_str),
-					     reg_msg->step_id[i]),
+			      build_step_id(step_str, sizeof(step_str),
+					    reg_msg->step_id[i],
+					    reg_msg->step_het_comp ?
+					    reg_msg->step_het_comp[i] :
+					    NO_VAL),
 			      reg_msg->node_name);
 			abort_job_on_node(reg_msg->job_id[i],
 					  job_ptr, node_ptr->name);
@@ -14147,16 +14150,22 @@ validate_jobs_on_node(slurm_node_registration_status_msg_t *reg_msg)
 			/* Race condition */
 			debug("Registered newly completed %pJ %s on %s",
 			      job_ptr,
-			      _build_step_id(step_str, sizeof(step_str),
-					     reg_msg->step_id[i]),
+			      build_step_id(step_str, sizeof(step_str),
+					    reg_msg->step_id[i],
+					    reg_msg->step_het_comp ?
+					    reg_msg->step_het_comp[i] :
+					    NO_VAL),
 			      node_ptr->name);
 		}
 
 		else {		/* else job is supposed to be done */
 			error("Registered %pJ %s in state %s on node %s",
 			      job_ptr,
-			      _build_step_id(step_str, sizeof(step_str),
-					     reg_msg->step_id[i]),
+			      build_step_id(step_str, sizeof(step_str),
+					    reg_msg->step_id[i],
+					    reg_msg->step_het_comp ?
+					    reg_msg->step_het_comp[i] :
+					    NO_VAL),
 			      job_state_string(job_ptr->job_state),
 			      reg_msg->node_name);
 			kill_job_on_node(job_ptr, node_ptr);
