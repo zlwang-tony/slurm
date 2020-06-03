@@ -795,8 +795,10 @@ _fill_registration_msg(slurm_node_registration_status_msg_t *msg)
 	steps = stepd_available(conf->spooldir, conf->node_name);
 	msg->job_count = list_count(steps);
 	msg->job_id    = xmalloc(msg->job_count * sizeof(*msg->job_id));
-	/* Note: Running batch jobs will have step_id == NO_VAL */
+	/* Note: Running batch jobs will have step_id == SLURM_BATCH_SCRIPT */
 	msg->step_id   = xmalloc(msg->job_count * sizeof(*msg->step_id));
+	msg->step_het_comp = xcalloc(msg->job_count,
+				     sizeof(*msg->step_het_comp));
 
 	i = list_iterator_create(steps);
 	n = 0;
@@ -830,6 +832,7 @@ _fill_registration_msg(slurm_node_registration_status_msg_t *msg)
 		}
 		msg->job_id[n]  = stepd->jobid;
 		msg->step_id[n] = stepd->stepid;
+		msg->step_het_comp[n] = stepd->step_het_comp;
 		n++;
 	}
 	list_iterator_destroy(i);
