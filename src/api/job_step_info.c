@@ -509,7 +509,7 @@ extern slurm_step_layout_t *
 slurm_job_step_layout_get(uint32_t job_id, uint32_t step_id,
 			  uint32_t step_het_comp)
 {
-	job_step_id_msg_t data;
+	slurm_step_id_t data;
 	slurm_msg_t req, resp;
 	int errnum;
 
@@ -558,7 +558,7 @@ extern int slurm_job_step_stat(uint32_t job_id, uint32_t step_id,
 {
 	slurm_msg_t req_msg;
 	ListIterator itr;
-	job_step_id_msg_t req;
+	slurm_step_id_t req;
 	List ret_list = NULL;
 	ret_data_info_t *ret_data_info = NULL;
 	int rc = SLURM_SUCCESS;
@@ -683,7 +683,7 @@ extern int slurm_job_step_get_pids(uint32_t job_id, uint32_t step_id,
 {
 	int rc = SLURM_SUCCESS;
 	slurm_msg_t req_msg;
-	job_step_id_msg_t req;
+	slurm_step_id_t req;
 	ListIterator itr;
 	List ret_list = NULL;
 	ret_data_info_t *ret_data_info = NULL;
