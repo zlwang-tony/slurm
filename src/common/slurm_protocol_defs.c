@@ -5954,3 +5954,19 @@ extern uint64_t suffix_mult(char *suffix)
 
 	return multiplier;
 }
+
+extern char *build_step_id(char *buf, int buf_len, slurm_step_id_t *step_id)
+{
+	xassert(step_id);
+
+	if (step_id->step_id == SLURM_BATCH_SCRIPT)
+		snprintf(buf, buf_len, "StepId=Batch");
+	else if (step_id->step_id == SLURM_EXTERN_CONT)
+		snprintf(buf, buf_len, "StepId=Extern");
+	else if (step_id->step_het_comp == NO_VAL)
+		snprintf(buf, buf_len, "StepId=%u", step_id->step_id);
+	else
+		snprintf(buf, buf_len, "StepId=%u+%u",
+			 step_id->step_id, step_id->step_het_comp);
+	return buf;
+}

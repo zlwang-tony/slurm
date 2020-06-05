@@ -2192,12 +2192,6 @@ extern step_record_t *build_extern_step(job_record_t *job_ptr);
  */
 extern step_record_t *build_batch_step(job_record_t *job_ptr_in);
 
-/*
- * Make a string that represents the step_id.
- */
-extern char *build_step_id(char *buf, int buf_len, uint32_t step_id,
-			   uint32_t step_het_comp);
-
 /* update first assigned job id as needed on reconfigure */
 extern void reset_first_job_id(void);
 

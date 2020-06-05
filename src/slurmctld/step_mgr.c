@@ -4767,17 +4767,3 @@ extern step_record_t *build_batch_step(job_record_t *job_ptr_in)
 
 	return step_ptr;
 }
-
-extern char *build_step_id(char *buf, int buf_len, uint32_t step_id,
-			   uint32_t step_het_comp)
-{
-	if (step_id == SLURM_BATCH_SCRIPT)
-		snprintf(buf, buf_len, "StepId=Batch");
-	else if (step_id == SLURM_EXTERN_CONT)
-		snprintf(buf, buf_len, "StepId=Extern");
-	else if (step_het_comp == NO_VAL)
-		snprintf(buf, buf_len, "StepId=%u", step_id);
-	else
-		snprintf(buf, buf_len, "StepId=%u+%u", step_id, step_het_comp);
-	return buf;
-}
